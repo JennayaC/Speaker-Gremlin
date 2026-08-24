@@ -1,23 +1,31 @@
 import socket
 import time
 import json
+import sys
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-sock.bind(('127.0.0.1', 5001))
+COOR_ADDR = ('127.0.0.1', 5001)
 
-print("Speaker node listening on port 5001...\n")
 
-for _ in range(5):
-    data, addr = sock.recvfrom(1024)
-    recv_ts = time.time()
+seq = 0
+node_id = sys.argv[1]
 
-    msg = json.loads(data.decode())
-    delta_ms = (recv_ts - msg['sender_ts']) * 1000
+print(f"I'M ALIVE! Node: {node_id}\n")
 
-    print(f"Recieved: seq={msg['seq']}  type={msg['type']}  sender_ts={msg['sender_ts']:.4f}")
-    print(f"Received at: {recv_ts:.4f}")
-    print(f"Delta: {delta_ms:.2f} ms")
+while True:
+    msg = {
+        "type": "HEARTBEAT",
+        "seq": seq,
+        "sender_ts": time.time(),
+        "node": node_id
+    }
+
+    payload = json.dumps(msg).encode()
+    sock.sendto(payload, COOR_ADDR)
+
+    seq += 1
+    time.sleep(0.5)
 
 sock.close()
 print("\nDone.")

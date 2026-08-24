@@ -1,25 +1,40 @@
 import socket
 import time
 import json
+
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-NODE_ADDR = ('127.0.0.1', 5001)
-seq = 0
+sock.bind(('127.0.0.1',5001))
 
-print("Coordinator started. Sending 5 SYNC messages...")
+print(f"Listening for heartbeats from nodes...")
+detected_nodes = {}
+sock.settimeout(2)
 
-for _ in range(5):
-    msg = {
-        "type": "SYNC",
-        "seq": seq,
-        "sender_ts": time.time()
-    }
-    payload = json.dumps(msg).encode()
-    sock.sendto(payload, NODE_ADDR)
-    print(f"Sent: seq={msg['seq']}  type={msg['type']}  sender_ts={msg['sender_ts']:.4f}")
+while True:
+    try:
+        data, addr = sock.recvfrom(2048)
+        recv_time = time.time()
 
-    seq += 1
-    time.sleep(0.5)
+        msg = json.loads(data.decode())
+        detected_nodes[msg["node"]] = recv_time
+        print(detected_nodes)
+    
+    except socket.timeout:
+        pass
+
+    for node_id in detected_nodes:
+        time_since_last_heartbeat = time.time() - detected_nodes[node_id]
+        if time_since_last_heartbeat > 2.5:
+            print(f"Node {node_id} heartbeat lost")
+        
+        
+
+
+
+
+
+    
+   
 
 sock.close()
 print("Done.")
