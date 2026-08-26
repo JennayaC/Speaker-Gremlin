@@ -8,6 +8,7 @@ sock.bind(('127.0.0.1',5001))
 
 print(f"Listening for heartbeats from nodes...")
 
+last_seen_sequence = {}
 detected_nodes = {}
 lost_nodes = set()
 sock.settimeout(1)
@@ -18,7 +19,20 @@ while True:
         recv_time = time.time()
 
         msg = json.loads(data.decode())
-        
+
+        node = msg['node']
+        seq = msg['seq']
+
+        if node in last_seen_sequence:
+            expected = last_seen_sequence[node] + 1
+            if seq < last_seen_sequence[node]:
+                print(f"Node {node} sequence reset")
+            elif seq > expected:
+                lost_packet_count = seq - expected
+                print(f"!!! {node} MISSED {lost_packet_count} packets!")
+                
+        last_seen_sequence[node] = seq
+    
         if msg["node"] in lost_nodes:
             print(f"Node {msg['node']} is back online!")
             lost_nodes.remove(msg["node"])

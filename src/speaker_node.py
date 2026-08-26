@@ -5,7 +5,7 @@ import sys
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-COOR_ADDR = ('127.0.0.1', 5001)
+COOR_ADDR = ('127.0.0.1', 5002) #node will send packets to chaos proxy
 
 
 seq = 0
