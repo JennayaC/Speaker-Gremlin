@@ -25,7 +25,9 @@ while True:
 
         if node in last_seen_sequence:
             expected = last_seen_sequence[node] + 1
-            if seq != expected:
+            if seq < last_seen_sequence[node]:
+                print(f"Node {node} sequence reset")
+            elif seq > expected:
                 lost_packet_count = seq - expected
                 print(f"!!! {node} MISSED {lost_packet_count} packets!")
                 
