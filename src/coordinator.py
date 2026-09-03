@@ -23,6 +23,10 @@ while True:
         node = msg['node']
         seq = msg['seq']
 
+        # Calculate round trip time for latency monitoring
+        latency = recv_time - msg['sender_ts'] 
+        print(f"Latency from {node}: {latency * 1000:.1f}ms")
+
         if node in last_seen_sequence:
             expected = last_seen_sequence[node] + 1
             if seq < last_seen_sequence[node]:

@@ -16,7 +16,7 @@ while True:
         time.sleep(random_delay) 
         sock.sendto(data,('127.0.0.1',5001))
         print(f"Forward heartbeat from {addr}")
-        print(f"Delay: {random_delay}")
+        print(f"Delay: {random_delay * 1000:.1f}ms")
 
         
         
