@@ -10,6 +10,8 @@ COOR_ADDR = ('127.0.0.1', 5002) #node will send packets to chaos proxy
 
 seq = 0
 node_id = sys.argv[1]
+port_num = int(sys.argv[2])
+sock.bind(('127.0.0.1',port_num))
 
 print(f"I'M ALIVE! Node: {node_id}\n")
 
@@ -18,7 +20,8 @@ while True:
         "type": "HEARTBEAT",
         "seq": seq,
         "sender_ts": time.time(),
-        "node": node_id
+        "node": node_id,
+        "port": port_num
     }
 
     payload = json.dumps(msg).encode()
