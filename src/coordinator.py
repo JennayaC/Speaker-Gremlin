@@ -10,9 +10,11 @@ print(f"Listening for heartbeats from nodes...")
 
 last_seen_sequence = {}
 detected_nodes = {}
+node_ports = {}
 lost_nodes = set()
 sock.settimeout(1)
 
+play_sent = False
 while True:
     try:
         data, addr = sock.recvfrom(2048)
@@ -22,6 +24,10 @@ while True:
 
         node = msg['node']
         seq = msg['seq']
+
+        # Calculate round trip time for latency monitoring
+        latency = recv_time - msg['sender_ts'] 
+        print(f"Latency from {node}: {latency * 1000:.1f}ms")
 
         if node in last_seen_sequence:
             expected = last_seen_sequence[node] + 1
@@ -38,7 +44,22 @@ while True:
             lost_nodes.remove(msg["node"])
 
         detected_nodes[msg["node"]] = recv_time
+        if "port" in msg:
+            node_ports[msg["node"]] = msg["port"]
         print(detected_nodes)
+
+        if play_sent == False and len(detected_nodes) == 2:
+            target_play_time = time.time() + 2.0
+            play_cmd = {
+                "type": "PLAY",
+                "sender_ts": time.time(),
+                "play_at": target_play_time
+            }
+            payload = json.dumps(play_cmd).encode()
+            for port in node_ports.values():
+                sock.sendto(payload, ('127.0.0.1', port))
+            print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
+            play_sent = True
     
     except socket.timeout:
         pass
