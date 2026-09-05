@@ -12,6 +12,7 @@ seq = 0
 node_id = sys.argv[1]
 port_num = int(sys.argv[2])
 sock.bind(('127.0.0.1',port_num))
+sock.settimeout(0.5)
 
 print(f"I'M ALIVE! Node: {node_id}\n")
 
@@ -28,7 +29,17 @@ while True:
     sock.sendto(payload, COOR_ADDR)
 
     seq += 1
-    time.sleep(0.5)
+    try:
+        data, addr = sock.recvfrom(2048)
+        msg = json.loads(data.decode())
+        if msg["type"] == "PLAY":
+            print(f"Received PLAY command, scheduled for: {msg['play_at']}")
+            wait_time = msg["play_at"] - time.time()
+            if wait_time > 0:
+                time.sleep(wait_time)
+                print(f"[{node_id}] PLAYING NOW! Local time: {time.time():.3f}")
+    except socket.timeout:
+        pass
 
 sock.close()
 print("\nDone.")
