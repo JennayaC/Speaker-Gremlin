@@ -14,13 +14,27 @@ port_num = int(sys.argv[2])
 sock.bind(('127.0.0.1',port_num))
 sock.settimeout(0.5)
 
+if len(sys.argv) > 3:
+    drift_val = float(sys.argv[3])
+    drift_rate = drift_val/1e6
+else:
+    drift_rate = 0.0
+
+start_real = time.time()
+start_mono = time.monotonic()
+
+def get_drifted_time():
+    elapsed = time.monotonic() - start_mono
+    drift = elapsed * (1.0 + drift_rate)
+    return start_real + drift #this is the drifted wall time
+
 print(f"I'M ALIVE! Node: {node_id}\n")
 
 while True:
     msg = {
         "type": "HEARTBEAT",
         "seq": seq,
-        "sender_ts": time.time(),
+        "sender_ts": get_drifted_time(),
         "node": node_id,
         "port": port_num
     }
@@ -34,10 +48,10 @@ while True:
         msg = json.loads(data.decode())
         if msg["type"] == "PLAY":
             print(f"Received PLAY command, scheduled for: {msg['play_at']}")
-            wait_time = msg["play_at"] - time.time()
+            wait_time = msg["play_at"] - get_drifted_time()
             if wait_time > 0:
                 time.sleep(wait_time)
-                print(f"[{node_id}] PLAYING NOW! Local time: {time.time():.3f}")
+                print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
     except socket.timeout:
         pass
 
