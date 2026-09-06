@@ -20,6 +20,13 @@ if len(sys.argv) > 3:
 else:
     drift_rate = 0.0
 
+start_real = time.time()
+start_mono = time.monotonic()
+
+def get_drifted_time():
+    elapsed = time.monotonic() - start_mono
+    drift = elapsed * (1.0 + drift_rate)
+    return start_real + drift #this is the drifted wall time
 
 print(f"I'M ALIVE! Node: {node_id}\n")
 
