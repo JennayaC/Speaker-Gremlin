@@ -25,9 +25,10 @@ while True:
         node = msg['node']
         seq = msg['seq']
 
-        # Calculate round trip time for latency monitoring
-        latency = recv_time - msg['sender_ts'] 
-        print(f"Latency from {node}: {latency * 1000:.1f}ms")
+        expected_ts = recv_time
+        local_ts = msg['sender_ts']
+        error_msg = (local_ts - expected_ts) * 1000
+        print(f"[{node}] Expected: {expected_ts:.3f} | Local: {local_ts:.3f} | Error: {error_msg:+.1f}ms")
 
         if node in last_seen_sequence:
             expected = last_seen_sequence[node] + 1
@@ -48,7 +49,7 @@ while True:
             node_ports[msg["node"]] = msg["port"]
         print(detected_nodes)
 
-        if play_sent == False and len(detected_nodes) == 2:
+        if play_sent == False and len(detected_nodes) == 3:
             target_play_time = time.time() + 2.0
             play_cmd = {
                 "type": "PLAY",

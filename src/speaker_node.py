@@ -34,7 +34,7 @@ while True:
     msg = {
         "type": "HEARTBEAT",
         "seq": seq,
-        "sender_ts": time.time(),
+        "sender_ts": get_drifted_time(),
         "node": node_id,
         "port": port_num
     }
@@ -48,10 +48,10 @@ while True:
         msg = json.loads(data.decode())
         if msg["type"] == "PLAY":
             print(f"Received PLAY command, scheduled for: {msg['play_at']}")
-            wait_time = msg["play_at"] - time.time()
+            wait_time = msg["play_at"] - get_drifted_time()
             if wait_time > 0:
                 time.sleep(wait_time)
-                print(f"[{node_id}] PLAYING NOW! Local time: {time.time():.3f}")
+                print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
     except socket.timeout:
         pass
 
