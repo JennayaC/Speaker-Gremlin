@@ -14,6 +14,13 @@ port_num = int(sys.argv[2])
 sock.bind(('127.0.0.1',port_num))
 sock.settimeout(0.5)
 
+if len(sys.argv) > 3:
+    drift_val = float(sys.argv[3])
+    drift_rate = drift_val/1e6
+else:
+    drift_rate = 0.0
+
+
 print(f"I'M ALIVE! Node: {node_id}\n")
 
 while True:
