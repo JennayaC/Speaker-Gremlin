@@ -13,8 +13,10 @@ detected_nodes = {}
 node_ports = {}
 lost_nodes = set()
 sock.settimeout(1)
-
+playback_state = "IDLE"
 play_sent = False
+target_play_time = None
+
 while True:
     try:
         data, addr = sock.recvfrom(2048)
@@ -25,6 +27,11 @@ while True:
         node = msg['node']
         seq = msg['seq']
 
+        detected_nodes[msg["node"]] = recv_time
+        if "port" in msg:
+            node_ports[msg["node"]] = msg["port"]
+        print(detected_nodes)
+        
         expected_ts = recv_time
         local_ts = msg['sender_ts']
         error_msg = (local_ts - expected_ts) * 1000
@@ -43,11 +50,15 @@ while True:
         if msg["node"] in lost_nodes:
             print(f"Node {msg['node']} is back online!")
             lost_nodes.remove(msg["node"])
-
-        detected_nodes[msg["node"]] = recv_time
-        if "port" in msg:
-            node_ports[msg["node"]] = msg["port"]
-        print(detected_nodes)
+            if playback_state == "PLAYING":
+                snapshot = {
+                    "type": "STATE_SNAPSHOT", 
+                    "play_at": target_play_time,
+                    "playback_state": playback_state 
+                }
+                payload = json.dumps(snapshot).encode()
+                sock.sendto(payload, ('127.0.0.1', node_ports[msg["node"]]))
+                print(f"Sent state snapshot to recovered node {msg['node']}")
 
         if play_sent == False and len(detected_nodes) == 3:
             target_play_time = time.time() + 2.0
@@ -60,6 +71,7 @@ while True:
             for port in node_ports.values():
                 sock.sendto(payload, ('127.0.0.1', port))
             print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
+            playback_state = "PLAYING"
             play_sent = True
     
     except socket.timeout:
