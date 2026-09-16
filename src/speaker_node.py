@@ -29,6 +29,7 @@ def get_drifted_time():
     return start_real + drift #this is the drifted wall time
 
 print(f"I'M ALIVE! Node: {node_id}\n")
+playback_state = "IDLE"
 
 while True:
     msg = {
@@ -52,6 +53,16 @@ while True:
             if wait_time > 0:
                 time.sleep(wait_time)
                 print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
+        if msg["type"] == "STATE_SNAPSHOT":
+            print(f"[RECOVERY]: sync to coordinator time: {msg['play_at']}")
+            playback_state = "PLAYING"
+            wait_time = msg['play_at'] - get_drifted_time()
+            if wait_time < 0:
+                elapsed = -wait_time
+                print(f"[{node_id}] RESUMED PLAYBACK! Snapped to {elapsed:.2f}s into track. Local time: {get_drifted_time():.3f}")
+            else:
+                time.sleep(wait_time)
+                print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_drifted_time():.3f}")
     except socket.timeout:
         pass
 
