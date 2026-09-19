@@ -8,7 +8,7 @@ try:
     while True:
         data, addr = sock.recvfrom(2048)
         drop = random.random()
-        if drop < 0: #temporary changing dropiut rate to 0 for latency testing
+        if drop < 0: #temporary changing dropout rate to 0 for latency testing
             print(f"Drop heartbeat from {addr}")
             continue
         else:
