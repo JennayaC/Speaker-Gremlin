@@ -31,43 +31,46 @@ def get_drifted_time():
 print(f"I'M ALIVE! Node: {node_id}\n")
 playback_state = "IDLE"
 
-while True:
-    msg = {
-        "type": "HEARTBEAT",
-        "seq": seq,
-        "sender_ts": get_drifted_time(),
-        "node": node_id,
-        "port": port_num
-    }
+try:
+    while True:
+        msg = {
+            "type": "HEARTBEAT",
+            "seq": seq,
+            "sender_ts": get_drifted_time(),
+            "node": node_id,
+            "port": port_num
+        }
 
-    payload = json.dumps(msg).encode()
-    sock.sendto(payload, COOR_ADDR)
+        payload = json.dumps(msg).encode()
+        sock.sendto(payload, COOR_ADDR)
 
-    seq += 1
-    try:
-        data, addr = sock.recvfrom(2048)
-        msg = json.loads(data.decode())
-        if msg["type"] == "PLAY":
-            print(f"Received PLAY command, scheduled for: {msg['play_at']}")
-            wait_time = msg["play_at"] - get_drifted_time()
-            if wait_time > 0:
-                time.sleep(wait_time)
-                print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
-        if msg["type"] == "STATE_SNAPSHOT":
-            print(f"[RECOVERY]: sync to coordinator time: {msg['play_at']}")
-            playback_state = "PLAYING"
-            wait_time = msg['play_at'] - get_drifted_time()
-            if wait_time < 0:
-                elapsed = -wait_time
-                print(f"[{node_id}] RESUMED PLAYBACK! Snapped to {elapsed:.2f}s into track. Local time: {get_drifted_time():.3f}")
-            else:
-                time.sleep(wait_time)
-                print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_drifted_time():.3f}")
-    except socket.timeout:
-        pass
-
-sock.close()
-print("\nDone.")
+        seq += 1
+        try:
+            data, addr = sock.recvfrom(2048)
+            msg = json.loads(data.decode())
+            if msg["type"] == "PLAY":
+                print(f"Received PLAY command, scheduled for: {msg['play_at']}")
+                wait_time = msg["play_at"] - get_drifted_time()
+                if wait_time > 0:
+                    time.sleep(wait_time)
+                    print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
+            if msg["type"] == "STATE_SNAPSHOT":
+                print(f"[RECOVERY]: sync to coordinator time: {msg['play_at']}")
+                playback_state = "PLAYING"
+                wait_time = msg['play_at'] - get_drifted_time()
+                if wait_time < 0:
+                    elapsed = -wait_time
+                    print(f"[{node_id}] RESUMED PLAYBACK! Snapped to {elapsed:.2f}s into track. Local time: {get_drifted_time():.3f}")
+                else:
+                    time.sleep(wait_time)
+                    print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_drifted_time():.3f}")
+        except socket.timeout:
+            pass
+except KeyboardInterrupt:
+    print(f"\n[{node_id}] Stopped by user.")
+finally:
+    sock.close()
+    print("Done.")
 
 
 
