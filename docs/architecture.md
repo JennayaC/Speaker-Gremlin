@@ -5,115 +5,149 @@
 
 ---
 
-## Version 0 — Conceptual Model
+## Current Architecture (Milestones 0–6)
 
-This describes the architecture we are targeting for the first runnable version.
-It will change. When it does, we note why.
+This describes the architecture implemented and tested across Milestones 0 through 6.
 
 ---
 
-### Components
+### Components & Topology
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        MacBook (localhost)                    │
+│                        Local Host Cluster                    │
 │                                                              │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐               │
 │  │ Speaker  │    │ Speaker  │    │ Speaker  │               │
 │  │  Node A  │    │  Node B  │    │  Node C  │               │
-│  │ :5001    │    │ :5002    │    │ :5003    │               │
+│  │ :5003    │    │ :5004    │    │ :5005    │               │
 │  └────┬─────┘    └────┬─────┘    └────┬─────┘               │
 │       │               │               │                      │
 │       └───────────────┼───────────────┘                      │
-│                       │                                      │
-│               ┌───────┴────────┐                             │
-│               │ Chaos Proxy    │  (optional, milestone 3+)   │
-│               │ :6000          │                             │
+│            HEARTBEAT  │ (uplink traffic)                     │
+│                       ▼                                      │
+│               ┌────────────────┐                             │
+│               │  Chaos Proxy   │                             │
+│               │  :5002         │                             │
+│               └───────┬────────┘                             │
+│       forwarded       │ (delayed / dropped)                  │
+│       HEARTBEAT       ▼                                      │
+│               ┌────────────────┐                             │
+│               │  Coordinator   │                             │
+│               │  :5001         │                             │
 │               └───────┬────────┘                             │
 │                       │                                      │
-│               ┌───────┴────────┐                             │
-│               │  Coordinator   │                             │
-│               │  :5000         │                             │
-│               └────────────────┘                             │
+│                       │ PLAY / STATE_SNAPSHOT (downlink)     │
+│                       └──────────────────────────────────────┘
 │                                                              │
-│  [Terminal observer reads stdout from all processes]         │
+│  [Stdout from all processes serves as the distributed log]   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Note**: The Chaos Proxy is introduced later. Early milestones will have nodes
-talk directly to the coordinator. We add the proxy once we understand what we
-want to intercept.
+**Network Routing:**
+- **Uplink (Nodes $\to$ Chaos Proxy $\to$ Coordinator):** Nodes transmit periodic heartbeats to the Chaos Proxy on port `5002`. The proxy injects configurable drop rates and jitter delays before forwarding packets to the Coordinator on port `5001`.
+- **Downlink (Coordinator $\to$ Nodes):** The Coordinator tracks each node's declared port (e.g. `5003`, `5004`, `5005`) and sends control messages (`PLAY`, `STATE_SNAPSHOT`) directly to the nodes.
 
 ---
 
-### Component responsibilities
+### Component Responsibilities
 
-#### Speaker Node
-- Listens on a UDP port
-- Receives commands (PLAY, PAUSE, SEEK, SYNC)
-- Maintains local playback state: `{playing: bool, position: float, last_updated: timestamp}`
-- Sends periodic heartbeats to coordinator
-- Logs all received messages with timestamps
+#### Speaker Node (`src/speaker_node.py`)
+- Binds to a designated UDP port (`sys.argv[2]`).
+- Periodically transmits a `HEARTBEAT` message with sequence number, port, and drifted local timestamp.
+- Simulates hardware oscillator error using a configurable drift rate (`--drift-ppm` / `sys.argv[3]`).
+- Listens for coordinator control commands:
+  - `PLAY`: Computes wait time until `play_at` timestamp and sleeps until execution time.
+  - `STATE_SNAPSHOT`: Computes elapsed time since `play_at` and snaps directly to the current track position.
 
-#### Coordinator
-- Sends timed playback commands to all nodes
-- Receives heartbeats and tracks which nodes are alive
-- Detects silent nodes (failure detection)
-- In early milestones: single point of authority
-- Later: we will question whether this is the right model
+#### Coordinator (`src/coordinator.py`)
+- Binds to UDP port `5001`.
+- Ingests heartbeats, tracks membership (`detected_nodes`), and associates nodes with their listen ports (`node_ports`).
+- Measures network/clock error: compares node timestamp against arrival time.
+- Detects packet drops by tracking missing sequence numbers (`seq > expected`).
+- Performs failure detection: marks a node as lost if no heartbeat is received within `2.5s`.
+- When all 3 nodes are registered, broadcasts a scheduled `PLAY` command with a 2-second future target time (`time.time() + 2.0`).
+- When a lost node resumes heartbeats, pushes a `STATE_SNAPSHOT` so the node can synchronize without restarting the cluster.
 
-#### Chaos Controller (proxy)
-- Sits in the message path between coordinator and nodes
-- Can: delay, drop, duplicate, or reorder messages
-- Controlled via a simple config file or stdin commands
-- Added in Milestone 3
+#### Chaos Proxy (`src/chaos_proxy.py`)
+- Binds to UDP port `5002`.
+- Intercepts node heartbeats and applies probabilistic chaos:
+  - **Packet Loss:** Drops packets if random value is below drop threshold.
+  - **Latency & Jitter:** Injects random delay (e.g., 0–300ms) before forwarding to the Coordinator (`:5001`).
 
 #### Observer
-- Not a separate process in early milestones
-- Each node and coordinator prints structured log lines to stdout
-- You run each process in its own terminal pane
-- Format: `[NodeA][12.438s] recv PLAY seq=4 coordinator_ts=12.430s drift=+8ms`
+- Distributed observability is maintained via structured standard output from each process.
+- Each event displays node identifier, timestamp, sequence numbers, and measured error (e.g., `[NodeA] Expected: 1718000.120 | Local: 1718000.125 | Error: +5.0ms`).
 
 ---
 
-### Message format (v0 — to be designed)
+### Message Format (Wire Protocol)
 
-We have not defined the wire format yet. Key questions to answer:
-- What fields does every message need?
-- Should we use JSON (readable) or a binary struct (fast, compact)?
-- What is the minimum information a PLAY command must carry?
+Messages are JSON-encoded strings over raw UDP datagrams.
 
-These will be designed in Milestone 1.
+#### 1. `HEARTBEAT` (Node $\to$ Proxy $\to$ Coordinator)
+```json
+{
+  "type": "HEARTBEAT",
+  "node": "NodeA",
+  "seq": 14,
+  "sender_ts": 1718000000.142,
+  "port": 5003
+}
+```
+
+#### 2. `PLAY` (Coordinator $\to$ Nodes)
+```json
+{
+  "type": "PLAY",
+  "sender_ts": 1718000002.500,
+  "play_at": 1718000004.500
+}
+```
+
+#### 3. `STATE_SNAPSHOT` (Coordinator $\to$ Recovering Node)
+```json
+{
+  "type": "STATE_SNAPSHOT",
+  "play_at": 1718000004.500,
+  "playback_state": "PLAYING"
+}
+```
 
 ---
 
-## Decision log
+## Decision Log
 
 | # | Decision | Rationale |
 |---|----------|-----------|
 | 1 | Separate OS processes, not objects | Real sockets, real timing, real packet behavior |
 | 2 | Python for prototype | Fast iteration; focus on concepts not language |
-| 3 | UDP over TCP (see `milestones.md`) | Exposes packet loss and ordering problems explicitly |
-| 4 | No external frameworks initially | Must understand mechanics before abstracting them |
-| 5 | Coordinator model (v0) | Simplest starting point; centralized vs. decentralized is an open question |
-| 6 | Text/terminal observer | No dashboard needed; structured stdout teaches what to log |
+| 3 | UDP over TCP | Exposes packet loss and ordering problems explicitly without kernel buffering / hidden retransmission |
+| 4 | No external frameworks | Must understand mechanics before abstracting them |
+| 5 | Coordinator model | Centralized authority simplifies initial membership and state distribution |
+| 6 | Text/terminal observer | Structured stdout teaches log design without adding UI dependencies |
+| 7 | Absolute timestamp scheduling (`play_at`) | Overcomes network jitter/latency variance by scheduling playback at a future point in time rather than instantaneous trigger |
+| 8 | Monotonic baseline for clock drift | Simulates oscillator imperfections using `time.monotonic() * (1 + drift_rate)` applied to wall-clock references |
+| 9 | State snapshot over message replay | When a node reconnects, coordinator transmits current snapshot state rather than replaying missed historical messages |
+| 10 | Uplink chaos interception | Intercepting node-to-coordinator traffic tests failure detection and packet loss without complicating two-way NAT/port routing in the proxy |
 
 ---
 
-## Open architectural questions
+## Architectural Insights & Answers
 
-These are intentionally not answered yet. We will reach them through experiments.
+These questions were posed at the project start and answered through the milestone implementations:
 
-1. **Centralized vs. decentralized**: Does a permanent coordinator make sense?
-   What happens if the coordinator itself fails?
+1. **Centralized vs. decentralized:**
+   - A centralized coordinator provides an authoritative clock and membership roster, making failure detection and scheduling straightforward. However, it represents a single point of failure (SPOF); if the coordinator crashes, all coordination ceases.
 
-2. **Logical clocks vs. wall clocks**: Should nodes use `time.time()` (wall clock)
-   or a logical counter for ordering? What are the tradeoffs?
+2. **Logical clocks vs. wall clocks:**
+   - Wall clocks (with future timestamps) are essential for synchronizing external physical events (e.g. audio playback at a target time). However, local wall clocks drift (PPM variance), demonstrating that physical timestamps alone cannot guarantee synchronization without a clock-sync protocol (e.g., NTP/PTP).
 
-3. **Pull vs. push for state sync**: Should nodes ask "what is the current state?"
-   or should the coordinator broadcast it continuously?
+3. **Pull vs. push for state sync:**
+   - We adopted a reactive **push** model: the coordinator detects the reappearance of a lost node's heartbeat and immediately pushes a `STATE_SNAPSHOT`. This eliminates the need for nodes to implement request-retry loops.
 
-4. **Idempotent commands**: If a PLAY command is delivered twice, should the node
-   play twice, or ignore the duplicate? How does it know it's a duplicate?
+4. **Idempotent commands:**
+   - By including an absolute `play_at` timestamp in the snapshot rather than an incremental delta ("play for 5 seconds"), commands become naturally idempotent. A node receiving duplicate snapshots calculates `elapsed = now - play_at` and arrives at the exact same track position.
 
-5. **What does "synchronized" mean exactly?** ±5ms? ±100ms? How do we measure it?
+5. **What does "synchronized" mean?**
+   - In distributed audio, synchronization means human-inaudible skew (typically $<5$ms). Without clock synchronization, clock drift (e.g. $\pm50$ PPM) accumulates drift of $\sim3$ms every minute, meaning nodes will quickly drift out of synchronization even if they started at the exact same millisecond.
