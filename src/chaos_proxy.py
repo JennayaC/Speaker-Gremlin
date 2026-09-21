@@ -1,3 +1,13 @@
+"""
+Speaker Gremlins -- Chaos Proxy
+
+- Sits between coordinator and speaker nodes
+- Relays UDP packets
+- Can drop packets or add delay
+- Helps simulate network failures
+
+"""
+
 import socket
 import random
 import time
@@ -12,20 +22,24 @@ parser.add_argument("--max-delay", type=float, default=0.0, help="Maximum random
 parser.add_argument("--target-node", type=str, default=None, help="Target specific node (e.g. NodeA). Defaults to ALL.")
 args = parser.parse_args()
 
+PROXY_PORT = 5002
+COORDINATOR_ADDR = ('127.0.0.1', 5001)
+
 print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_delay*1000:.0f}ms, Target: {args.target_node or 'ALL'})")
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(('127.0.0.1', 5002))
+sock.bind(('127.0.0.1', PROXY_PORT))
 
-#Helper function so delay runs in background process
+#Helper function so delay runs in background process without blocking incoming messages
 def delayed_send(data, delay, node):
     time.sleep(delay)
-    sock.sendto(data, ('127.0.0.1', 5001)) #forward to coordinator
+    sock.sendto(data, COORDINATOR_ADDR) #forward to coordinator
     print(f"Forward heartbeat from {node} (Delay: {delay * 1000:.1f}ms)")
 
-
+#Main loop
 try:
     while True:
+        # 1. Parse Packet to identify source node
         data, addr = sock.recvfrom(2048)
         try:
             msg = json.loads(data.decode())
@@ -33,16 +47,16 @@ try:
         except Exception:
             node = None
 
-        # Check if this packet is targeted for chaos
+        # 2. Check if packet is targeted for chaos 
         is_target = (args.target_node is None) or (node == args.target_node)
 
+        # 3. Packet Drop Logic
         if is_target:
-            # Packet drop check
             if args.drop > 0 and random.random() < args.drop:
                 print(f"Drop heartbeat from {node or addr}")
                 continue
 
-            # Jitter / delay check
+            # 4. Jitter / delay check
             if args.max_delay > 0:
                 delay = random.uniform(0, args.max_delay)
                 threading.Thread(target=delayed_send, args=(data,delay,node), daemon=True).start()
@@ -51,8 +65,9 @@ try:
                 print(f"Forward heartbeat from {node or addr} (No delay or drop)")
         else:
             print(f"Forward heartbeat from {node or addr} (Passthrough)")
-
-        sock.sendto(data, ('127.0.0.1', 5001))
+            
+        # 5. Forwarded Packet to Coordinator
+        sock.sendto(data, COORDINATOR_ADDR)
 except KeyboardInterrupt:
     print("\nChaos proxy stopped by user.")
 finally:
