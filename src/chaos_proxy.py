@@ -3,6 +3,7 @@ import random
 import time
 import argparse
 import json
+import threading 
 
 # Define CLI arguments
 parser = argparse.ArgumentParser(description="Chaos Proxy for Speaker Gremlins")
@@ -15,6 +16,13 @@ print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_de
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind(('127.0.0.1', 5002))
+
+#Helper function so delay runs in background process
+def delayed_send(data, delay, node):
+    time.sleep(delay)
+    sock.sendto(data, ('127.0.0.1', 5001)) #forward to coordinator
+    print(f"Forward heartbeat from {node} (Delay: {delay * 1000:.1f}ms)")
+
 
 try:
     while True:
@@ -37,8 +45,8 @@ try:
             # Jitter / delay check
             if args.max_delay > 0:
                 delay = random.uniform(0, args.max_delay)
-                time.sleep(delay)
-                print(f"Forward heartbeat from {node or addr} (Delay: {delay * 1000:.1f}ms)")
+                threading.Thread(target=delayed_send, args=(data,delay,node), daemon=True).start()
+                continue #jump to next packet after to continue recieving packets from other nodes
             else:
                 print(f"Forward heartbeat from {node or addr} (No delay or drop)")
         else:

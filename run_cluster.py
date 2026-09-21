@@ -4,10 +4,11 @@ import time
 
 commands = [
     [sys.executable, "src/coordinator.py"],
-    [sys.executable, "src/chaos_proxy.py"],
+    [sys.executable, "src/chaos_proxy.py", "--max-delay", "3.5", "--target-node", "NodeA"],
     [sys.executable, "src/speaker_node.py", "NodeA", "5003", "0"],
     [sys.executable, "src/speaker_node.py", "NodeB", "5004", "50"],
     [sys.executable, "src/speaker_node.py", "NodeC", "5005", "-100"],
+
 ]
 
 processes = []

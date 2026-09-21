@@ -201,6 +201,13 @@ as dead and send it a "rejoin" state snapshot?
 This experiment surfaces the fundamental tension in failure detection: act too
 fast → false positives; act too slow → real failures go undetected.
 
+**Findings & Observations:**
+- **Can the coordinator distinguish a dead node from a slow node?** No. In an asynchronous network, silence caused by latency and silence caused by a process crash look identical to the receiver.
+- **Observed Behavior:** Injecting up to 3.5s delay on `NodeA` exceeded the coordinator's 2.5s heartbeat timeout. The coordinator falsely declared `NodeA` dead (`heartbeat lost`). When delayed heartbeats eventually arrived, the coordinator treated `NodeA` as a newly rejoined node and blasted an unnecessary `STATE_SNAPSHOT`.
+- **Playback Impact:** `NodeA` snapped its playback time to resynchronize, which in a real audio cluster would cause audible audio skipping, stuttering, or repeated sections.
+- **Out-of-Order Packet Delivery:** Even with 0% packet drop rate, asynchronous per-packet jitter caused packets to arrive out of order. The coordinator misinterpreted older delayed packets as sequence resets and subsequent packets as missed/dropped packets.
+- **Core Trade-off:** Short timeouts enable rapid failure detection but cause high false-positive rates on congested networks; long timeouts reduce false alarms but leave real node failures undetected for long periods.
+
 ---
 
 ### Experiment B — The Duplicate Command Problem
