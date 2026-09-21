@@ -201,6 +201,13 @@ as dead and send it a "rejoin" state snapshot?
 This experiment surfaces the fundamental tension in failure detection: act too
 fast → false positives; act too slow → real failures go undetected.
 
+**Findings & Observations:**
+- **Can the coordinator distinguish a dead node from a slow node?** No. In an asynchronous network, silence caused by latency and silence caused by a process crash look identical to the receiver.
+- **Observed Behavior:** Injecting up to 3.5s delay on `NodeA` exceeded the coordinator's 2.5s heartbeat timeout. The coordinator falsely declared `NodeA` dead (`heartbeat lost`). When delayed heartbeats eventually arrived, the coordinator treated `NodeA` as a newly rejoined node and blasted an unnecessary `STATE_SNAPSHOT`.
+- **Playback Impact:** `NodeA` snapped its playback time to resynchronize, which in a real audio cluster would cause audible audio skipping, stuttering, or repeated sections.
+- **Out-of-Order Packet Delivery:** Even with 0% packet drop rate, asynchronous per-packet jitter caused packets to arrive out of order. The coordinator misinterpreted older delayed packets as sequence resets and subsequent packets as missed/dropped packets.
+- **Core Trade-off:** Short timeouts enable rapid failure detection but cause high false-positive rates on congested networks; long timeouts reduce false alarms but leave real node failures undetected for long periods.
+
 ---
 
 ### Experiment B — The Duplicate Command Problem
@@ -216,6 +223,13 @@ what goes wrong.
 This experiment teaches idempotency, at-most-once vs. at-least-once delivery,
 and why these properties are hard to guarantee across a network.
 
+**Findings & Observations:**
+- **What happens when the same PLAY command arrives twice?** Without idempotency guards, nodes process redundant commands repeatedly, leading to duplicate reactions, desynchronized states, or glitches (e.g., repeated play attempts, skipped tracks, double state transitions).
+- **Observed Behavior Without Protection:** When duplicate commands were delivered back-to-back, nodes logged receipt for each duplicate packet. Unprotected commands were only spared from executing twice by coincidence (negative wait times), rather than deliberate protocol design.
+- **Idempotency Implementation:** Added monotonic command sequence numbers (`cmd_seq`) from the coordinator and tracked `last_applied_seq` on each speaker node.
+- **Observed Behavior With Protection:** Nodes successfully applied the initial command (`cmd_seq = 1`), scheduled synchronized playback, and subsequently detected and dropped the duplicate packet with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`, maintaining uninterrupted playback.
+- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once,
+
 ---
 
 ### Experiment C — The Returning Stranger
@@ -230,6 +244,12 @@ always win? What if the coordinator itself crashed and was replaced?
 This experiment is a direct entry point into consensus problems. You do not need
 to implement Raft. But after this experiment you will understand intuitively why
 Raft exists.
+
+**Findings & Observations:**
+- **A node rejoins with a conflicting view of the world. Who wins?** The entity with the higher state version (or term number). State versioning creates a deterministic conflict resolution rule.
+- **Observed Behavior:** While `NodeA` was isolated via network packet drops, the coordinator declared `NodeA` lost, bumped cluster state to `version = 2` (simulating track advancement), and continued playback. When `NodeA` reconnected, it received `version = 2`, detected that its local `version = 1` was stale (`[NodeA] CONFLICT: Local version 1 is stale! Adopting coordinator version 2`), and resynchronized its playback.
+- **Does the coordinator always win?** Only when its version is strictly newer. Because speaker nodes enforce `if incoming_version > current_version:`, if a coordinator crashes, restarts with a wiped/reset version (`0`), and broadcasts stale state, nodes will explicitly reject the downgrade (`REJECTED SNAPSHOT: Local version >= incoming version`).
+- **Foundation of Consensus (Raft/Paxos):** This mechanic demonstrates why distributed systems rely on monotonic term/epoch numbers. It provides a formal, decentralized method to resolve split-brain scenarios and stale state divergence across partitioned networks.
 
 ---
 
