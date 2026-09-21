@@ -223,6 +223,13 @@ what goes wrong.
 This experiment teaches idempotency, at-most-once vs. at-least-once delivery,
 and why these properties are hard to guarantee across a network.
 
+**Findings & Observations:**
+- **What happens when the same PLAY command arrives twice?** Without idempotency guards, nodes process redundant commands repeatedly, leading to duplicate reactions, desynchronized states, or glitches (e.g., repeated play attempts, skipped tracks, double state transitions).
+- **Observed Behavior Without Protection:** When duplicate commands were delivered back-to-back, nodes logged receipt for each duplicate packet. Unprotected commands were only spared from executing twice by coincidence (negative wait times), rather than deliberate protocol design.
+- **Idempotency Implementation:** Added monotonic command sequence numbers (`cmd_seq`) from the coordinator and tracked `last_applied_seq` on each speaker node.
+- **Observed Behavior With Protection:** Nodes successfully applied the initial command (`cmd_seq = 1`), scheduled synchronized playback, and subsequently detected and dropped the duplicate packet with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`, maintaining uninterrupted playback.
+- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once,
+
 ---
 
 ### Experiment C — The Returning Stranger

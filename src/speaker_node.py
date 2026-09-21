@@ -30,6 +30,7 @@ def get_drifted_time():
 
 print(f"I'M ALIVE! Node: {node_id}\n")
 playback_state = "IDLE"
+last_applied_seq = 0
 
 try:
     while True:
@@ -49,7 +50,12 @@ try:
             data, addr = sock.recvfrom(2048)
             msg = json.loads(data.decode())
             if msg["type"] == "PLAY":
-                print(f"Received PLAY command, scheduled for: {msg['play_at']}")
+                #Ignore duplicate / stale commands
+                if msg["cmd_seq"] <= last_applied_seq:
+                    print(f"[{node_id}] Drop redundant PLAY command (seq {msg['cmd_seq']}). Last applied: {last_applied_seq}")
+                    continue
+                last_applied_seq = msg["cmd_seq"]   
+                print(f"[{node_id}] Received PLAY command, scheduled for: {msg['play_at']}")
                 wait_time = msg["play_at"] - get_drifted_time()
                 if wait_time > 0:
                     time.sleep(wait_time)

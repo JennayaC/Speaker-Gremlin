@@ -16,6 +16,7 @@ sock.settimeout(1)
 playback_state = "IDLE"
 play_sent = False
 target_play_time = None
+command_sequence = 0
 
 try:
     while True:
@@ -63,15 +64,18 @@ try:
 
             if play_sent == False and len(detected_nodes) == 3:
                 target_play_time = time.time() + 2.0
+                command_sequence += 1
                 play_cmd = {
                     "type": "PLAY",
                     "sender_ts": time.time(),
-                    "play_at": target_play_time
+                    "play_at": target_play_time,
+                    "cmd_seq": command_sequence
                 }
                 payload = json.dumps(play_cmd).encode()
+                print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
                 for port in node_ports.values():
                     sock.sendto(payload, ('127.0.0.1', port))
-                print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
+                    sock.sendto(payload, ('127.0.0.1', port)) #Deliberately send duplicate command
                 playback_state = "PLAYING"
                 play_sent = True
         
