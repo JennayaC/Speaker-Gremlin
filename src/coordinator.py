@@ -17,6 +17,7 @@ playback_state = "IDLE"
 play_sent = False
 target_play_time = None
 command_sequence = 0
+state_version = 1
 
 try:
     while True:
@@ -56,7 +57,8 @@ try:
                     snapshot = {
                         "type": "STATE_SNAPSHOT", 
                         "play_at": target_play_time,
-                        "playback_state": playback_state 
+                        "playback_state": playback_state,
+                        "version": state_version
                     }
                     payload = json.dumps(snapshot).encode()
                     sock.sendto(payload, ('127.0.0.1', node_ports[msg["node"]]))
@@ -69,7 +71,8 @@ try:
                     "type": "PLAY",
                     "sender_ts": time.time(),
                     "play_at": target_play_time,
-                    "cmd_seq": command_sequence
+                    "cmd_seq": command_sequence,
+                    "version": state_version
                 }
                 payload = json.dumps(play_cmd).encode()
                 print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
@@ -85,6 +88,9 @@ try:
         for node_id in detected_nodes:
             time_since_last_heartbeat = time.time() - detected_nodes[node_id]
             if time_since_last_heartbeat > 2.5 and node_id not in lost_nodes:
+                state_version += 1
+                target_play_time -= 5.0
+                print(f"***CLUSTER STATE CHANGED: Coordinator bumped state to version {state_version}***")
                 print(f"Node {node_id} heartbeat lost")
                 lost_nodes.add(node_id)
 except KeyboardInterrupt:

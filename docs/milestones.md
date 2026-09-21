@@ -245,6 +245,12 @@ This experiment is a direct entry point into consensus problems. You do not need
 to implement Raft. But after this experiment you will understand intuitively why
 Raft exists.
 
+**Findings & Observations:**
+- **A node rejoins with a conflicting view of the world. Who wins?** The entity with the higher state version (or term number). State versioning creates a deterministic conflict resolution rule.
+- **Observed Behavior:** While `NodeA` was isolated via network packet drops, the coordinator declared `NodeA` lost, bumped cluster state to `version = 2` (simulating track advancement), and continued playback. When `NodeA` reconnected, it received `version = 2`, detected that its local `version = 1` was stale (`[NodeA] CONFLICT: Local version 1 is stale! Adopting coordinator version 2`), and resynchronized its playback.
+- **Does the coordinator always win?** Only when its version is strictly newer. Because speaker nodes enforce `if incoming_version > current_version:`, if a coordinator crashes, restarts with a wiped/reset version (`0`), and broadcasts stale state, nodes will explicitly reject the downgrade (`REJECTED SNAPSHOT: Local version >= incoming version`).
+- **Foundation of Consensus (Raft/Paxos):** This mechanic demonstrates why distributed systems rely on monotonic term/epoch numbers. It provides a formal, decentralized method to resolve split-brain scenarios and stale state divergence across partitioned networks.
+
 ---
 
 ## What we are deliberately not building (yet)
