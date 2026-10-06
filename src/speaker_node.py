@@ -1,38 +1,56 @@
+"""
+Speaker Gremlins - Speaker Node
+
+This node sends heartbeat messages to the chaos proxy and plays audio at the scheduled time.
+- Receives playback commands from coordinator
+- Waits until the scheduled time to play audio
+- Detects clock drift and adjusts playback time
+- Re-syncs with the cluster if it misses a command
+-Enforces idempotency of PLAY commands (ignores duplicates)
+-Updates its current state using state snapshots from the coordinator
+
+"""
 import socket
 import time
 import json
 import sys
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-COOR_ADDR = ('127.0.0.1', 5002) #node will send packets to chaos proxy
-
-
-seq = 0
+#CLI Argument Parsing - Node ID (1,2,3), Port Number (5003,5004,5005), Drift Value (+ or -)
 node_id = sys.argv[1]
 port_num = int(sys.argv[2])
-sock.bind(('127.0.0.1',port_num))
-sock.settimeout(0.5)
 
+#Optional drift value for clock skew (in microseconds)
 if len(sys.argv) > 3:
     drift_val = float(sys.argv[3])
     drift_rate = drift_val/1e6
 else:
     drift_rate = 0.0
 
+#Socket setup
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+COOR_ADDR = ('127.0.0.1', 5002) #node will send packets to chaos proxy
+sock.bind(('127.0.0.1',port_num))
+sock.settimeout(0.5)
+
+#Starting clock values
 start_real = time.time()
 start_mono = time.monotonic()
 
+#Uses monotonic timer to simulate a real hardware clock that drifts over time 
 def get_drifted_time():
     elapsed = time.monotonic() - start_mono
     drift = elapsed * (1.0 + drift_rate)
     return start_real + drift #this is the drifted wall time
 
 print(f"I'M ALIVE! Node: {node_id}\n")
-playback_state = "IDLE"
-last_applied_seq = 0
-current_version = 0
 
+#Variables to keep track of node state
+seq = 0 #Outgoing heartbeat sequence number
+playback_state = "IDLE" #Current state of the node
+last_applied_seq = 0 #Sequence number of last applied PLAY command
+current_version = 0 #Version number of last applied state snapshot
+
+#Main loop
 try:
     while True:
         msg = {
@@ -50,6 +68,8 @@ try:
         try:
             data, addr = sock.recvfrom(2048)
             msg = json.loads(data.decode())
+
+            # 1. Handle PLAY Command (idempotency check)
             if msg["type"] == "PLAY":
                 current_version = msg.get("version", 1)
                 #Ignore duplicate / stale commands
@@ -62,7 +82,9 @@ try:
                 if wait_time > 0:
                     time.sleep(wait_time)
                     print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
-            if msg["type"] == "STATE_SNAPSHOT":
+
+            # 2. Handle STATE_SNAPSHOT (resync for nodes that missed the PLAY command)
+            elif msg["type"] == "STATE_SNAPSHOT":
                 incoming_version = msg.get("version", 1)
                 # Compare local version with incoming snapshot version
                 if incoming_version > current_version:
@@ -85,11 +107,3 @@ except KeyboardInterrupt:
 finally:
     sock.close()
     print("Done.")
-
-
-
-
-
-
-
-
