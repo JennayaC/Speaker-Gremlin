@@ -241,6 +241,33 @@ new position, change playback speed, etc.). When the isolated node reconnects,
 it carries stale state. Design a conflict resolution rule. Does the coordinator
 always win? What if the coordinator itself crashed and was replaced?
 
+**How to run it:**
+
+1. In `src/run_cluster.py`, make sure the Experiment C proxy line is the only
+   proxy line that is not commented out:
+   `[sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"]`
+   This tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
+   drop them for the next 10 seconds, then forward them again.
+   Also make sure the coordinator line (the first line in the `commands` list)
+   is commented out:
+   `#[sys.executable, "src/coordinator.py"],`
+   That way the coordinator does not start with the cluster. You start it on its
+   own in step 2.
+2. **Terminal 1:** start the coordinator on its own with `python src/coordinator.py`.
+   It runs on its own so you can restart it later without stopping the nodes.
+3. **Terminal 2:** from the project root, start the rest of the cluster with
+   `python src/run_cluster.py`.
+4. Watch the coordinator. You should see:
+   - About 7-8s: `***CLUSTER STATE CHANGED: Coordinator bumped state to version 2***`
+     followed by `Node NodeA heartbeat lost`. This is the "update the coordinator
+     state" step. It happens on its own.
+   - About 15s: `Node NodeA is back online!`
+   - NodeA prints `CONFLICT: Local version 1 is stale! Adopting coordinator version 2`.
+5. **Coordinator crash:** once NodeA is back, press Ctrl+C in Terminal 1, then
+   start the coordinator again with `python src/coordinator.py`. Watch what the
+   three nodes print in Terminal 2.
+6. Press Ctrl+C in both terminals to stop.
+
 This experiment is a direct entry point into consensus problems. You do not need
 to implement Raft. But after this experiment you will understand intuitively why
 Raft exists.
