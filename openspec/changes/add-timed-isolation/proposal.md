@@ -12,7 +12,7 @@ Experiment C (The Returning Stranger) needs a node to be cut off for a while and
 - During that time window, every heartbeat from the target node is dropped. Before and after the window, the target node's traffic acts as it does now.
 - The cutoff uses the same target rule as `--drop`: only the node named by `--target-node`, or every node if no target is given.
 - When the new switches are not given, the proxy works exactly like it does now.
-- Working names for the switches: `--isolate-after` and `--isolate-for`. These are placeholders and can be renamed.
+- Switch names: `--wait-after` and `--isolate-for`.
 
 Out of scope for this change:
 - Duplicate PLAY commands for Experiment B. PLAY messages don't go through the proxy yet, so that needs its own change.
@@ -31,4 +31,4 @@ Out of scope for this change:
 - `src/chaos_proxy.py`: new switches, a saved start time, and a time-window check in the packet drop logic.
 - No changes to `src/coordinator.py` or `src/speaker_node.py`.
 - Experiment C can now run with one command line and no code edits:
-  `python src/chaos_proxy.py --target-node NodeA --isolate-after 5 --isolate-for 10`
+  `python src/chaos_proxy.py --target-node NodeA --wait-after 5 --isolate-for 10`
