@@ -6,9 +6,37 @@ Speaker Gremlins -- Cluster
 
 """
 
+import argparse
 import subprocess
 import sys
 import time
+
+# Setup used when no --experiment is given: everything runs, nothing is broken.
+NORMAL = {"proxy_args": [], "start_coordinator": True}
+
+# Named experiment setups. Each one says:
+#   proxy_args        -> extra switches passed to the chaos proxy
+#   start_coordinator -> start the coordinator with the cluster or not
+EXPERIMENTS = {
+    # Experiment A: delay NodeA's packets by up to 3.5s
+    "A": {
+        "proxy_args": ["--target-node", "NodeA", "--max-delay", "3.5"],
+        "start_coordinator": True,
+    },
+    # Experiment C: cut NodeA off from 5s to 15s.
+    # Coordinator is off so you can run (and restart) it in its own terminal.
+    "C": {
+        "proxy_args": ["--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"],
+        "start_coordinator": False,  # False = you must start the coordinator yourself in its own terminal
+    },
+}
+
+# --experiment switch. Valid names come straight from the EXPERIMENTS keys,
+# so adding a new experiment above automatically makes it a valid choice.
+parser = argparse.ArgumentParser(description="Start the Speaker Gremlins cluster")
+parser.add_argument("--experiment", choices=EXPERIMENTS.keys(), default=None,
+                    help="Run a named experiment setup. Leave out for a normal run.")
+args = parser.parse_args()
 
 commands = [
     #[sys.executable, "src/coordinator.py"],
