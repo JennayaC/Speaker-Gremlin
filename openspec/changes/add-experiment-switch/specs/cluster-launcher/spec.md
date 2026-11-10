@@ -30,6 +30,19 @@ When started with `--experiment C`, the launcher SHALL start a chaos proxy that 
 - **AND** the chaos proxy starts with `--target-node NodeA --wait-after 5 --isolate-for 10`
 - **AND** no coordinator process is started by the launcher
 
+### Requirement: Wait for a separately started coordinator
+When the chosen setup does not start the coordinator, the launcher SHALL print a reminder to start it in another terminal and SHALL wait for the user to press Enter before starting any process.
+
+#### Scenario: Pause before Experiment C starts
+- **WHEN** the user runs `python src/run_cluster.py --experiment C`
+- **THEN** the launcher prints the reminder and waits
+- **AND** no proxy or node process starts until the user presses Enter
+
+#### Scenario: Ctrl+C while waiting
+- **WHEN** the launcher is waiting for Enter
+- **AND** the user presses Ctrl+C
+- **THEN** the launcher exits cleanly without starting any process
+
 ### Requirement: Unknown experiment name rejected
 When given an `--experiment` name it does not know, the launcher SHALL print an error that lists the valid names and SHALL start no processes.
 

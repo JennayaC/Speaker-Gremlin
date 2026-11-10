@@ -6,6 +6,7 @@
 - [x] 1.2 Add an `argparse` parser with an optional `--experiment` switch whose `choices` come from the dictionary. Verify: `python src/run_cluster.py --experiment Z` prints an error listing A and C and starts nothing.
 - [x] 1.3 Replace the hardcoded `commands` list with one built from the chosen entry (coordinator if on, then proxy with its arguments, then NodeA, NodeB, NodeC). Remove the old commented-out lines. Verify: the startup and shutdown code below it is unchanged.
 - [x] 1.4 Print which experiment is running at startup (and a reminder to start the coordinator yourself when it's off). Verify: the first lines of output name the experiment.
+- [x] 1.5 When the coordinator is off, wait for Enter before starting any process (so the reminder can't scroll away and the proxy's timer starts only after the coordinator is up). Verify: `--experiment C` sits at "Press Enter..." with no node output; Ctrl+C there exits cleanly.
 
 ## 2. Check each setup runs
 

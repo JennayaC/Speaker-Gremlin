@@ -70,6 +70,9 @@ try:
         print(f"Setup: Experiment {args.experiment}")
     if not setup["start_coordinator"]:
         print("Coordinator NOT started. Start it yourself in its own terminal: python src/coordinator.py")
+        # Wait here so the reminder can't scroll away, and so the proxy's
+        # isolation timer only starts once the coordinator is really running.
+        input("Press Enter once the coordinator is running...")
     for cmd in commands:
         p = subprocess.Popen(cmd)
         processes.append(p)
