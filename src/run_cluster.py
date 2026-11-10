@@ -38,16 +38,26 @@ parser.add_argument("--experiment", choices=EXPERIMENTS.keys(), default=None,
                     help="Run a named experiment setup. Leave out for a normal run.")
 args = parser.parse_args()
 
-commands = [
-    #[sys.executable, "src/coordinator.py"],
-    #[sys.executable, "src/chaos_proxy.py", "--drop", "0.85", "--target-node", "NodeA"], (from testing keep commented for now)
-    [sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"], #(Experiment C: cut NodeA off from 5s to 15s)
-    #[sys.executable, "src/chaos_proxy.py"],
-    [sys.executable, "src/speaker_node.py", "NodeA", "5003", "0"],
-    [sys.executable, "src/speaker_node.py", "NodeB", "5004", "50"],
-    [sys.executable, "src/speaker_node.py", "NodeC", "5005", "-100"],
+# Pick the setup: NORMAL if no --experiment was given, otherwise that experiment.
+if args.experiment is None:
+    setup = NORMAL
+else:
+    setup = EXPERIMENTS[args.experiment]
 
-]
+# Build the list of processes to start, in order.
+commands = []
+
+# 1. Coordinator first (only if this setup starts it)
+if setup["start_coordinator"]:
+    commands.append([sys.executable, "src/coordinator.py"])
+
+# 2. Chaos proxy, with this setup's switches added on the end
+commands.append([sys.executable, "src/chaos_proxy.py"] + setup["proxy_args"])
+
+# 3. The three speaker nodes (same in every setup)
+commands.append([sys.executable, "src/speaker_node.py", "NodeA", "5003", "0"])
+commands.append([sys.executable, "src/speaker_node.py", "NodeB", "5004", "50"])
+commands.append([sys.executable, "src/speaker_node.py", "NodeC", "5005", "-100"])
 
 processes = []
 
