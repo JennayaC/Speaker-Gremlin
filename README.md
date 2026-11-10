@@ -91,7 +91,6 @@ Speaker-Gremlin/
 ├── docs/
 │   ├── architecture.md <- Living system design and wire protocol specs
 │   ├── milestones.md   <- Milestone roadmap and anchor experiments
-│   ├── M0_plan.md      <- Milestone 0 bootstrap design
 │   └── speaker_gremlins_report.md <- Final project report
 ├── openspec/
 │   └── specs/          <- Specs: the rules the code must follow
