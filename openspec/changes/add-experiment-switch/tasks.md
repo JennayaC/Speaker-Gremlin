@@ -5,7 +5,7 @@
 - [x] 1.1 In `src/run_cluster.py`, add a dictionary near the top (after the imports) with entries for normal, `A`, and `C`. Each entry holds the chaos proxy arguments and whether to start the coordinator. Verify: read it and check A = `--target-node NodeA --max-delay 3.5` with coordinator on, C = `--target-node NodeA --wait-after 5 --isolate-for 10` with coordinator off.
 - [x] 1.2 Add an `argparse` parser with an optional `--experiment` switch whose `choices` come from the dictionary. Verify: `python src/run_cluster.py --experiment Z` prints an error listing A and C and starts nothing.
 - [x] 1.3 Replace the hardcoded `commands` list with one built from the chosen entry (coordinator if on, then proxy with its arguments, then NodeA, NodeB, NodeC). Remove the old commented-out lines. Verify: the startup and shutdown code below it is unchanged.
-- [ ] 1.4 Print which experiment is running at startup (and a reminder to start the coordinator yourself when it's off). Verify: the first lines of output name the experiment.
+- [x] 1.4 Print which experiment is running at startup (and a reminder to start the coordinator yourself when it's off). Verify: the first lines of output name the experiment.
 
 ## 2. Check each setup runs
 

@@ -64,6 +64,12 @@ processes = []
 try:
     # 1. Begin startup to allow enough time for ports to bind
     print("Starting Speaker Gremlins cluster...")
+    if args.experiment is None:
+        print("Setup: normal run (no experiment)")
+    else:
+        print(f"Setup: Experiment {args.experiment}")
+    if not setup["start_coordinator"]:
+        print("Coordinator NOT started. Start it yourself in its own terminal: python src/coordinator.py")
     for cmd in commands:
         p = subprocess.Popen(cmd)
         processes.append(p)
