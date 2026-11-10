@@ -71,12 +71,18 @@ try:
 
             # 1. Handle PLAY Command (idempotency check)
             if msg["type"] == "PLAY":
-                current_version = msg.get("version", 1)
-                #Ignore duplicate / stale commands
+                incoming_version = msg.get("version", 1)
+                #Ignore duplicate / stale commands (check BEFORE changing any state)
                 if msg["cmd_seq"] <= last_applied_seq:
                     print(f"[{node_id}] Drop redundant PLAY command (seq {msg['cmd_seq']}). Last applied: {last_applied_seq}")
                     continue
-                last_applied_seq = msg["cmd_seq"]   
+                #Reject commands from an older state version (same rule as STATE_SNAPSHOT, never downgrade)
+                if incoming_version < current_version:
+                    print(f"[{node_id}] REJECTED PLAY: Local version {current_version} > incoming version {incoming_version}")
+                    continue
+                #Command passed both checks, now it is safe to update state
+                current_version = incoming_version
+                last_applied_seq = msg["cmd_seq"]
                 print(f"[{node_id}] Received PLAY command, scheduled for: {msg['play_at']}")
                 wait_time = msg["play_at"] - get_drifted_time()
                 if wait_time > 0:
