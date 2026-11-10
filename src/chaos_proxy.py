@@ -47,7 +47,12 @@ start_time = time.monotonic()
 try:
     while True:
         # 1. Parse Packet to identify source node
-        data, addr = sock.recvfrom(2048)
+        try:
+            data, addr = sock.recvfrom(2048)
+        except ConnectionResetError:
+            # Windows "nobody home" note: the coordinator isn't listening right now. Keep going.
+            print("Coordinator not reachable, packet lost")
+            continue
         try:
             msg = json.loads(data.decode())
             node = msg.get("node")

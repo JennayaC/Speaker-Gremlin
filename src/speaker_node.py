@@ -102,6 +102,10 @@ try:
                     print(f"[{node_id}] REJECTED SNAPSHOT: Local version {current_version} >= incoming version {incoming_version}")
         except socket.timeout:
             pass
+        except ConnectionResetError:
+            # Windows "nobody home" note: the proxy/coordinator isn't listening right now.
+            # Wait like a timeout would, so heartbeats keep their normal 0.5s pace.
+            time.sleep(0.5)
 except KeyboardInterrupt:
     print(f"\n[{node_id}] Stopped by user.")
 finally:

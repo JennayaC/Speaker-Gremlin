@@ -11,7 +11,7 @@ import sys
 import time
 
 commands = [
-    [sys.executable, "src/coordinator.py"],
+    #[sys.executable, "src/coordinator.py"],
     #[sys.executable, "src/chaos_proxy.py", "--drop", "0.85", "--target-node", "NodeA"], (from testing keep commented for now)
     [sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"], #(Experiment C: cut NodeA off from 5s to 15s)
     #[sys.executable, "src/chaos_proxy.py"],
