@@ -241,6 +241,33 @@ new position, change playback speed, etc.). When the isolated node reconnects,
 it carries stale state. Design a conflict resolution rule. Does the coordinator
 always win? What if the coordinator itself crashed and was replaced?
 
+**How to run it:**
+
+1. In `src/run_cluster.py`, make sure the Experiment C proxy line is the only
+   proxy line that is not commented out:
+   `[sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"]`
+   This tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
+   drop them for the next 10 seconds, then forward them again.
+   Also make sure the coordinator line (the first line in the `commands` list)
+   is commented out:
+   `#[sys.executable, "src/coordinator.py"],`
+   That way the coordinator does not start with the cluster. You start it on its
+   own in step 2.
+2. **Terminal 1:** start the coordinator on its own with `python src/coordinator.py`.
+   It runs on its own so you can restart it later without stopping the nodes.
+3. **Terminal 2:** from the project root, start the rest of the cluster with
+   `python src/run_cluster.py`.
+4. Watch the coordinator. You should see:
+   - About 7-8s: `***CLUSTER STATE CHANGED: Coordinator bumped state to version 2***`
+     followed by `Node NodeA heartbeat lost`. This is the "update the coordinator
+     state" step. It happens on its own.
+   - About 15s: `Node NodeA is back online!`
+   - NodeA prints `CONFLICT: Local version 1 is stale! Adopting coordinator version 2`.
+5. **Coordinator crash:** once NodeA is back, press Ctrl+C in Terminal 1, then
+   start the coordinator again with `python src/coordinator.py`. Watch what the
+   three nodes print in Terminal 2.
+6. Press Ctrl+C in both terminals to stop.
+
 This experiment is a direct entry point into consensus problems. You do not need
 to implement Raft. But after this experiment you will understand intuitively why
 Raft exists.
@@ -248,7 +275,9 @@ Raft exists.
 **Findings & Observations:**
 - **A node rejoins with a conflicting view of the world. Who wins?** The entity with the higher state version (or term number). State versioning creates a deterministic conflict resolution rule.
 - **Observed Behavior:** While `NodeA` was isolated via network packet drops, the coordinator declared `NodeA` lost, bumped cluster state to `version = 2` (simulating track advancement), and continued playback. When `NodeA` reconnected, it received `version = 2`, detected that its local `version = 1` was stale (`[NodeA] CONFLICT: Local version 1 is stale! Adopting coordinator version 2`), and resynchronized its playback.
-- **Does the coordinator always win?** Only when its version is strictly newer. Because speaker nodes enforce `if incoming_version > current_version:`, if a coordinator crashes, restarts with a wiped/reset version (`0`), and broadcasts stale state, nodes will explicitly reject the downgrade (`REJECTED SNAPSHOT: Local version >= incoming version`).
+- **Does the coordinator always win?** No. After `NodeA` came back at `version = 2`, the coordinator was stopped with Ctrl+C and started again. The restarted coordinator forgot everything: it starts again at `version = 1` and its command counter starts again at `cmd_seq = 1`.
+- **Observed Behavior After Coordinator Restart:** All three nodes rejected the new coordinator's PLAY with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`. It was rejected by the **sequence check**, not the version check. The node checks `cmd_seq` first, and since every node had already applied seq 1 from the old coordinator, the PLAY was dropped before the version check (`REJECTED PLAY: Local version > incoming version`) ever ran. NodeB and NodeC (still at `version = 1`) rejected it for the same reason.
+- **Why it matters:** The nodes protect themselves from going backward, but now the whole cluster ignores the restarted coordinator. The cluster is stuck *ahead* of a coordinator that has lost its memory. Fixing this means the coordinator has to learn the highest version and `cmd_seq` the nodes have (or save them to disk) before it sends commands.
 - **Foundation of Consensus (Raft/Paxos):** This mechanic demonstrates why distributed systems rely on monotonic term/epoch numbers. It provides a formal, decentralized method to resolve split-brain scenarios and stale state divergence across partitioned networks.
 
 ---
