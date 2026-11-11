@@ -18,9 +18,12 @@ NORMAL = {"proxy_args": [], "start_coordinator": True}
 #   proxy_args        -> extra switches passed to the chaos proxy
 #   start_coordinator -> start the coordinator with the cluster or not
 EXPERIMENTS = {
-    # Experiment A: delay NodeA's packets by up to 3.5s
+    # Experiment A: NodeA is alive but very unreliable. 70% of its heartbeats are
+    # dropped and the rest are delayed by up to 3.5s. Delay alone isn't enough:
+    # some heartbeat almost always slips through within 2.5s, so the coordinator
+    # never declares NodeA lost. The drops create gaps long enough to fool it.
     "A": {
-        "proxy_args": ["--target-node", "NodeA", "--max-delay", "3.5"],
+        "proxy_args": ["--target-node", "NodeA", "--max-delay", "3.5", "--drop", "0.7"],
         "start_coordinator": True,
     },
     # Experiment C: cut NodeA off from 5s to 15s.

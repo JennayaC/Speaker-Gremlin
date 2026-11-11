@@ -9,7 +9,7 @@ Right now, to run an experiment you open `src/run_cluster.py` and comment lines 
 - `src/run_cluster.py` gets an optional `--experiment <name>` switch.
 - Each experiment name maps to the chaos proxy command it needs, and to whether the coordinator starts with the cluster.
 - Names added now:
-  - `A`: chaos proxy delays NodeA by up to 3.5s. Coordinator starts with the cluster.
+  - `A`: chaos proxy drops 70% of NodeA's heartbeats and delays the rest by up to 3.5s. Coordinator starts with the cluster. (Delay alone was tried first: some heartbeat almost always arrived within the 2.5s timeout, so NodeA was never declared lost.)
   - `C`: chaos proxy cuts off NodeA from 5s to 15s. Coordinator does **not** start with the cluster (you run it in its own terminal so you can restart it).
 - With no `--experiment`, the cluster starts everything normally: coordinator, a chaos proxy that breaks nothing, and the 3 nodes. This matches what the README "Quick way" already says. Before this change the coordinator line was commented out.
 - An unknown name stops with an error that lists the valid names, and starts nothing.

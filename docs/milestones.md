@@ -201,6 +201,22 @@ as dead and send it a "rejoin" state snapshot?
 This experiment surfaces the fundamental tension in failure detection: act too
 fast → false positives; act too slow → real failures go undetected.
 
+**How to run it:**
+
+1. From the project root, run `python src/run_cluster.py --experiment A`.
+   This starts the coordinator, the three nodes, and a chaos proxy that drops
+   70% of NodeA's heartbeats and delays the rest by a random amount up to
+   3.5 seconds. NodeA is alive the whole time, just very unreliable.
+2. Watch the coordinator. Some gaps between NodeA's heartbeats are longer than
+   its 2.5s timeout, so you should see `Node NodeA heartbeat lost`, then
+   `Node NodeA is back online!` and `Sent state snapshot to recovered node NodeA`
+   when a late heartbeat finally arrives. You will also see `sequence reset` or
+   `MISSED` lines, because the delayed heartbeats arrive out of order.
+   Why the drops: with delay alone, NodeA sends a heartbeat every 0.5s and each
+   one gets its own random delay, so some heartbeat almost always arrives within
+   2.5s and the coordinator never declares NodeA lost.
+3. Press Ctrl+C to stop.
+
 **Findings & Observations:**
 - **Can the coordinator distinguish a dead node from a slow node?** No. In an asynchronous network, silence caused by latency and silence caused by a process crash look identical to the receiver.
 - **Observed Behavior:** Injecting up to 3.5s delay on `NodeA` exceeded the coordinator's 2.5s heartbeat timeout. The coordinator falsely declared `NodeA` dead (`heartbeat lost`). When delayed heartbeats eventually arrived, the coordinator treated `NodeA` as a newly rejoined node and blasted an unnecessary `STATE_SNAPSHOT`.
@@ -243,20 +259,16 @@ always win? What if the coordinator itself crashed and was replaced?
 
 **How to run it:**
 
-1. In `src/run_cluster.py`, make sure the Experiment C proxy line is the only
-   proxy line that is not commented out:
-   `[sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"]`
-   This tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
-   drop them for the next 10 seconds, then forward them again.
-   Also make sure the coordinator line (the first line in the `commands` list)
-   is commented out:
-   `#[sys.executable, "src/coordinator.py"],`
-   That way the coordinator does not start with the cluster. You start it on its
-   own in step 2.
+1. **Terminal 2:** from the project root, run
+   `python src/run_cluster.py --experiment C`.
+   It prints a reminder and waits for you to press Enter. Nothing starts yet.
+   This setup tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
+   drop them for the next 10 seconds, then forward them again. It does not
+   start the coordinator.
 2. **Terminal 1:** start the coordinator on its own with `python src/coordinator.py`.
    It runs on its own so you can restart it later without stopping the nodes.
-3. **Terminal 2:** from the project root, start the rest of the cluster with
-   `python src/run_cluster.py`.
+3. Go back to **Terminal 2** and press Enter. The chaos proxy and the three
+   nodes start now, so the times below count from this moment.
 4. Watch the coordinator. You should see:
    - About 7-8s: `***CLUSTER STATE CHANGED: Coordinator bumped state to version 2***`
      followed by `Node NodeA heartbeat lost`. This is the "update the coordinator

@@ -14,12 +14,12 @@ When started with no `--experiment` switch, the launcher SHALL start the coordin
 - **THEN** the coordinator, a plain chaos proxy, and NodeA, NodeB, NodeC all start
 
 ### Requirement: Experiment A setup
-When started with `--experiment A`, the launcher SHALL start the coordinator, a chaos proxy that delays NodeA's packets by a random amount up to 3.5 seconds, and the three speaker nodes.
+When started with `--experiment A`, the launcher SHALL start the coordinator, a chaos proxy that drops 70% of NodeA's packets and delays the rest by a random amount up to 3.5 seconds, and the three speaker nodes.
 
 #### Scenario: Run Experiment A
 - **WHEN** the user runs `python src/run_cluster.py --experiment A`
 - **THEN** the coordinator and the three nodes start
-- **AND** the chaos proxy starts with `--target-node NodeA --max-delay 3.5`
+- **AND** the chaos proxy starts with `--target-node NodeA --max-delay 3.5 --drop 0.7`
 
 ### Requirement: Experiment C setup
 When started with `--experiment C`, the launcher SHALL start a chaos proxy that cuts off NodeA from 5 to 15 seconds after it starts, and the three speaker nodes. It SHALL NOT start the coordinator.
