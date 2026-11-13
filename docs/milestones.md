@@ -184,7 +184,7 @@ correct position or drift to it gradually?
 
 ## Anchor Experiments
 
-These are the three standalone experiments planned for later in the project.
+These are the three standalone experiments in the project.
 Each one asks a specific engineering question.
 
 ---
@@ -193,10 +193,14 @@ Each one asks a specific engineering question.
 
 > **Question:** Can the coordinator distinguish a dead node from a slow node?
 
-Set up one node with very high jitter (1–3 second delays) and one node that is
-actually dead (process killed). From the coordinator's perspective, both nodes
-go quiet. How do you tell the difference? What happens if you treat a slow node
-as dead and send it a "rejoin" state snapshot?
+Compare a node that is slow with a node that is actually dead.
+The `--experiment A` switch sets up the slow one: NodeA stays alive, but most of
+its heartbeats are dropped and the rest are delayed by up to 3.5 seconds.
+For the dead one, look back at Milestone 2, where you killed a node with Ctrl+C:
+the coordinator printed `heartbeat lost` and the node never came back.
+From the coordinator's perspective, both nodes go quiet. How do you tell the
+difference? What happens if you treat a slow node as dead and send it a
+state snapshot?
 
 This experiment surfaces the fundamental tension in failure detection: act too
 fast → false positives; act too slow → real failures go undetected.
@@ -239,12 +243,32 @@ what goes wrong.
 This experiment teaches idempotency, at-most-once vs. at-least-once delivery,
 and why these properties are hard to guarantee across a network.
 
+**How to run it:**
+
+1. From the project root, run `python src/run_cluster.py --experiment B`.
+   This starts the coordinator, the three nodes, and a chaos proxy that sends
+   every PLAY command twice (`--duplicate 1.0`). PLAY goes from the coordinator
+   through the chaos proxy to each node, so the proxy can copy it.
+2. Watch the output. You should see:
+   - The proxy, for each node: `Relay PLAY to port 500X`, then
+     `Duplicate PLAY to port 500X`.
+   - Each node, once: `Received PLAY command, scheduled for: ...`
+   - Each node, about 2 seconds later: `Drop redundant PLAY command (seq 1). Last applied: 1`.
+     It's late because the node sleeps until play time before it reads the copy.
+3. Press Ctrl+C to stop.
+4. **Optional, break it:** in `src/speaker_node.py`, comment out the `cmd_seq`
+   check in the PLAY handler (the `if msg["cmd_seq"] <= last_applied_seq:` block)
+   and run step 1 again. Each node now prints `Received PLAY command` twice:
+   it accepts the copy. It doesn't print `PLAYING NOW!` a second time only
+   because the play time has already passed, which is luck, not protection.
+   Undo the change when you're done.
+
 **Findings & Observations:**
 - **What happens when the same PLAY command arrives twice?** Without idempotency guards, nodes process redundant commands repeatedly, leading to duplicate reactions, desynchronized states, or glitches (e.g., repeated play attempts, skipped tracks, double state transitions).
 - **Observed Behavior Without Protection:** When duplicate commands were delivered back-to-back, nodes logged receipt for each duplicate packet. Unprotected commands were only spared from executing twice by coincidence (negative wait times), rather than deliberate protocol design.
 - **Idempotency Implementation:** Added monotonic command sequence numbers (`cmd_seq`) from the coordinator and tracked `last_applied_seq` on each speaker node.
 - **Observed Behavior With Protection:** Nodes successfully applied the initial command (`cmd_seq = 1`), scheduled synchronized playback, and subsequently detected and dropped the duplicate packet with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`, maintaining uninterrupted playback.
-- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once,
+- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once.
 
 ---
 

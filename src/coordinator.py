@@ -18,6 +18,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 sock.bind(('127.0.0.1',5001))
 sock.settimeout(1) #prevents program from hanging on recvfrom
+PROXY_ADDR = ('127.0.0.1', 5002) #PLAY commands go through the chaos proxy
 
 print(f"Listening for heartbeats from nodes...")
 
@@ -94,11 +95,12 @@ try:
                     "cmd_seq": command_sequence,
                     "version": state_version
                 }
-                payload = json.dumps(play_cmd).encode()
                 print(f"Sent PLAY command to nodes, scheduled for: {target_play_time:.3f}")
                 for port in node_ports.values():
-                    sock.sendto(payload, ('127.0.0.1', port))
-                    #sock.sendto(payload, ('127.0.0.1', port)) #Deliberately send duplicate command (Commented out for now, this was for testing)
+                    # PLAY goes through the chaos proxy. 'to_port' tells the proxy which node it's for.
+                    play_cmd["to_port"] = port
+                    payload = json.dumps(play_cmd).encode()
+                    sock.sendto(payload, PROXY_ADDR)
                 playback_state = "PLAYING"
                 play_sent = True
         

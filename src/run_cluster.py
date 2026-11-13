@@ -26,6 +26,12 @@ EXPERIMENTS = {
         "proxy_args": ["--target-node", "NodeA", "--max-delay", "3.5", "--drop", "0.7"],
         "start_coordinator": True,
     },
+    # Experiment B: the proxy sends every PLAY command twice.
+    # Nodes should apply the first one and drop the copy (same cmd_seq).
+    "B": {
+        "proxy_args": ["--duplicate", "1.0"],
+        "start_coordinator": True,
+    },
     # Experiment C: cut NodeA off from 5s to 15s.
     # Coordinator is off so you can run (and restart) it in its own terminal.
     "C": {
