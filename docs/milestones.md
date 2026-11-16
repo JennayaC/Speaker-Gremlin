@@ -184,7 +184,7 @@ correct position or drift to it gradually?
 
 ## Anchor Experiments
 
-These are the three standalone experiments planned for later in the project.
+These are the three standalone experiments in the project.
 Each one asks a specific engineering question.
 
 ---
@@ -193,19 +193,39 @@ Each one asks a specific engineering question.
 
 > **Question:** Can the coordinator distinguish a dead node from a slow node?
 
-Set up one node with very high jitter (1–3 second delays) and one node that is
-actually dead (process killed). From the coordinator's perspective, both nodes
-go quiet. How do you tell the difference? What happens if you treat a slow node
-as dead and send it a "rejoin" state snapshot?
+Compare a node that is slow with a node that is actually dead.
+The `--experiment A` switch sets up the slow one: NodeA stays alive, but most of
+its heartbeats are dropped and the rest are delayed by up to 3.5 seconds.
+For the dead one, look back at Milestone 2, where you killed a node with Ctrl+C:
+the coordinator printed `heartbeat lost` and the node never came back.
+From the coordinator's perspective, both nodes go quiet. How do you tell the
+difference? What happens if you treat a slow node as dead and send it a
+state snapshot?
 
 This experiment surfaces the fundamental tension in failure detection: act too
 fast → false positives; act too slow → real failures go undetected.
 
+**How to run it:**
+
+1. From the project root, run `python src/run_cluster.py --experiment A`.
+   This starts the coordinator, the three nodes, and a chaos proxy that drops
+   70% of NodeA's heartbeats and delays the rest by a random amount up to
+   3.5 seconds. NodeA is alive the whole time, just very unreliable.
+2. Watch the coordinator. Some gaps between NodeA's heartbeats are longer than
+   its 2.5s timeout, so you should see `Node NodeA heartbeat lost`, then
+   `Node NodeA is back online!` and `Sent state snapshot to recovered node NodeA`
+   when a late heartbeat finally arrives. You will also see `sequence reset` or
+   `MISSED` lines, because the delayed heartbeats arrive out of order.
+   Why the drops: with delay alone, NodeA sends a heartbeat every 0.5s and each
+   one gets its own random delay, so some heartbeat almost always arrives within
+   2.5s and the coordinator never declares NodeA lost.
+3. Press Ctrl+C to stop.
+
 **Findings & Observations:**
 - **Can the coordinator distinguish a dead node from a slow node?** No. In an asynchronous network, silence caused by latency and silence caused by a process crash look identical to the receiver.
-- **Observed Behavior:** Injecting up to 3.5s delay on `NodeA` exceeded the coordinator's 2.5s heartbeat timeout. The coordinator falsely declared `NodeA` dead (`heartbeat lost`). When delayed heartbeats eventually arrived, the coordinator treated `NodeA` as a newly rejoined node and blasted an unnecessary `STATE_SNAPSHOT`.
+- **Observed Behavior:** With 70% of `NodeA`'s heartbeats dropped and the rest delayed by up to 3.5s, some gaps between heartbeats were longer than the coordinator's 2.5s timeout. The coordinator falsely declared `NodeA` dead (`heartbeat lost`). When a delayed heartbeat eventually arrived, the coordinator treated `NodeA` as a newly rejoined node and blasted an unnecessary `STATE_SNAPSHOT`.
 - **Playback Impact:** `NodeA` snapped its playback time to resynchronize, which in a real audio cluster would cause audible audio skipping, stuttering, or repeated sections.
-- **Out-of-Order Packet Delivery:** Even with 0% packet drop rate, asynchronous per-packet jitter caused packets to arrive out of order. The coordinator misinterpreted older delayed packets as sequence resets and subsequent packets as missed/dropped packets.
+- **Out-of-Order Packet Delivery:** In an earlier delay-only run (0% packet drop rate), asynchronous per-packet jitter still caused packets to arrive out of order. The coordinator misinterpreted older delayed packets as sequence resets and subsequent packets as missed/dropped packets.
 - **Core Trade-off:** Short timeouts enable rapid failure detection but cause high false-positive rates on congested networks; long timeouts reduce false alarms but leave real node failures undetected for long periods.
 
 ---
@@ -223,12 +243,32 @@ what goes wrong.
 This experiment teaches idempotency, at-most-once vs. at-least-once delivery,
 and why these properties are hard to guarantee across a network.
 
+**How to run it:**
+
+1. From the project root, run `python src/run_cluster.py --experiment B`.
+   This starts the coordinator, the three nodes, and a chaos proxy that sends
+   every PLAY command twice (`--duplicate 1.0`). PLAY goes from the coordinator
+   through the chaos proxy to each node, so the proxy can copy it.
+2. Watch the output. You should see:
+   - The proxy, for each node: `Relay PLAY to port 500X`, then
+     `Duplicate PLAY to port 500X`.
+   - Each node, once: `Received PLAY command, scheduled for: ...`
+   - Each node, about 2 seconds later: `Drop redundant PLAY command (seq 1). Last applied: 1`.
+     It's late because the node sleeps until play time before it reads the copy.
+3. Press Ctrl+C to stop.
+4. **Optional, break it:** in `src/speaker_node.py`, comment out the `cmd_seq`
+   check in the PLAY handler (the `if msg["cmd_seq"] <= last_applied_seq:` block)
+   and run step 1 again. Each node now prints `Received PLAY command` twice:
+   it accepts the copy. It doesn't print `PLAYING NOW!` a second time only
+   because the play time has already passed, which is luck, not protection.
+   Undo the change when you're done.
+
 **Findings & Observations:**
 - **What happens when the same PLAY command arrives twice?** Without idempotency guards, nodes process redundant commands repeatedly, leading to duplicate reactions, desynchronized states, or glitches (e.g., repeated play attempts, skipped tracks, double state transitions).
 - **Observed Behavior Without Protection:** When duplicate commands were delivered back-to-back, nodes logged receipt for each duplicate packet. Unprotected commands were only spared from executing twice by coincidence (negative wait times), rather than deliberate protocol design.
 - **Idempotency Implementation:** Added monotonic command sequence numbers (`cmd_seq`) from the coordinator and tracked `last_applied_seq` on each speaker node.
 - **Observed Behavior With Protection:** Nodes successfully applied the initial command (`cmd_seq = 1`), scheduled synchronized playback, and subsequently detected and dropped the duplicate packet with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`, maintaining uninterrupted playback.
-- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once,
+- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once.
 
 ---
 
@@ -243,20 +283,16 @@ always win? What if the coordinator itself crashed and was replaced?
 
 **How to run it:**
 
-1. In `src/run_cluster.py`, make sure the Experiment C proxy line is the only
-   proxy line that is not commented out:
-   `[sys.executable, "src/chaos_proxy.py", "--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"]`
-   This tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
-   drop them for the next 10 seconds, then forward them again.
-   Also make sure the coordinator line (the first line in the `commands` list)
-   is commented out:
-   `#[sys.executable, "src/coordinator.py"],`
-   That way the coordinator does not start with the cluster. You start it on its
-   own in step 2.
+1. **Terminal 2:** from the project root, run
+   `python src/run_cluster.py --experiment C`.
+   It prints a reminder and waits for you to press Enter. Nothing starts yet.
+   This setup tells the chaos proxy to forward NodeA's heartbeats for 5 seconds,
+   drop them for the next 10 seconds, then forward them again. It does not
+   start the coordinator.
 2. **Terminal 1:** start the coordinator on its own with `python src/coordinator.py`.
    It runs on its own so you can restart it later without stopping the nodes.
-3. **Terminal 2:** from the project root, start the rest of the cluster with
-   `python src/run_cluster.py`.
+3. Go back to **Terminal 2** and press Enter. The chaos proxy and the three
+   nodes start now, so the times below count from this moment.
 4. Watch the coordinator. You should see:
    - About 7-8s: `***CLUSTER STATE CHANGED: Coordinator bumped state to version 2***`
      followed by `Node NodeA heartbeat lost`. This is the "update the coordinator

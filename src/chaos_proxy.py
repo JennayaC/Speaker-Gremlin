@@ -22,12 +22,13 @@ parser.add_argument("--max-delay", type=float, default=0.0, help="Maximum random
 parser.add_argument("--target-node", type=str, default=None, help="Target specific node (e.g. NodeA). Defaults to ALL.")
 parser.add_argument("--wait-after", type=float, default=0.0, help="Seconds after proxy start before the target node is cut off")
 parser.add_argument("--isolate-for", type=float, default=0.0, help="Seconds the target node stays cut off (0 = never cut off)")
+parser.add_argument("--duplicate", type=float, default=0.0, help="Probability of sending each PLAY command twice (0.0 to 1.0)")
 args = parser.parse_args()
 
 PROXY_PORT = 5002
 COORDINATOR_ADDR = ('127.0.0.1', 5001)
 
-print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_delay*1000:.0f}ms, Target: {args.target_node or 'ALL'})")
+print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_delay*1000:.0f}ms, Duplicate PLAY: {args.duplicate*100:.0f}%, Target: {args.target_node or 'ALL'})")
 if args.isolate_for > 0:
     print(f"Isolation window: cut off {args.target_node or 'ALL'} from {args.wait_after:.1f}s to {args.wait_after + args.isolate_for:.1f}s")
 
@@ -57,7 +58,20 @@ try:
             msg = json.loads(data.decode())
             node = msg.get("node")
         except Exception:
+            msg = {}
             node = None
+
+        # Experiment B. PLAY command from the coordinator: relay it to the node it's addressed to.
+        # Proxy Duplicate Mode
+        if msg.get("type") == "PLAY":
+            node_port = msg["to_port"]
+            sock.sendto(data, ('127.0.0.1', node_port))
+            print(f"Relay PLAY to port {node_port}")
+            # Duplicate mode: with this chance, send the exact same PLAY a second time
+            if args.duplicate > 0 and random.random() < args.duplicate:
+                sock.sendto(data, ('127.0.0.1', node_port))
+                print(f"Duplicate PLAY to port {node_port}")
+            continue
 
         # 2. Check if packet is targeted for chaos 
         is_target = (args.target_node is None) or (node == args.target_node)
