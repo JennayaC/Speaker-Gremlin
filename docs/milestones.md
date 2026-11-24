@@ -5,7 +5,7 @@ one observable behavior, and one commit.
 
 ---
 
-## Milestone 0 — Skeleton and first message
+## Milestone 0 — Skeleton and first message [DONE]
 
 **Concept: process boundaries and raw sockets**
 
@@ -29,7 +29,7 @@ print each one with its arrival timestamp?
 
 ---
 
-## Milestone 1 — Structured messages and timestamps
+## Milestone 1 — Structured messages and timestamps [DONE]
 
 **Concept: wire format design and latency measurement**
 
@@ -54,7 +54,7 @@ message in this system needs? Think about it, then we discuss.
 
 ---
 
-## Milestone 2 — Three nodes and heartbeats
+## Milestone 2 — Three nodes and heartbeats [DONE]
 
 **Concept: failure detection via heartbeat timeouts**
 
@@ -79,7 +79,7 @@ Change the timeout and repeat. What is the right value?
 
 ---
 
-## Milestone 3 — Chaos proxy and packet loss
+## Milestone 3 — Chaos proxy and packet loss [DONE]
 
 **Concept: packet loss, observable unreliability**
 
@@ -104,7 +104,7 @@ What does the node know? What does it not know?
 
 ---
 
-## Milestone 4 — Latency injection and jitter
+## Milestone 4 — Latency injection and jitter [DONE]
 
 **Concept: jitter, timing sensitivity, and out-of-order delivery**
 
@@ -130,7 +130,7 @@ observe whether nodes all start playing at the same perceived moment.
 
 ---
 
-## Milestone 5 — Clock drift simulation
+## Milestone 5 — Clock drift simulation [DONE]
 
 **Concept: local clocks are not synchronized; drift accumulates**
 
@@ -138,14 +138,14 @@ Real devices do not share a clock. Each has its own oscillator that runs at
 a slightly different rate. Over time, clocks that started together diverge.
 
 **You will build:**
-- Each node process accepts a `--drift-ppm` argument (parts per million)
-- The node's local clock is simulated as `time.monotonic() * (1 + drift_rate)`
+- Each node process accepts an optional 3rd argument: its clock drift in parts per million (PPM), for example `python src/speaker_node.py NodeB 5004 50`. Leave it out for a drift of 0.
+- The node's local clock is simulated as `start_time + elapsed * (1 + drift_rate)`, where `elapsed` is how much `time.monotonic()` has moved since the node started (see `get_drifted_time()` in `src/speaker_node.py`)
 - The observer output now shows: `expected_ts | local_ts | error`
 
 **You will learn:**
 - What clock drift is and why it is measured in PPM
 - Why distributed systems cannot rely on wall clocks without a synchronization protocol
-- What NTP does conceptually (without implementing it)
+- What NTP does conceptually (without implementing it here; Milestone 7 builds a simple version of the same idea)
 - How synchronization error grows linearly with drift rate and time
 
 **Experiment:** Run three nodes with drift values of 0, +50ppm, -100ppm.
@@ -156,7 +156,7 @@ mathematically before running the experiment?
 
 ---
 
-## Milestone 6 — Node rejoin and state recovery
+## Milestone 6 — Node rejoin and state recovery [DONE]
 
 **Concept: how does a returning node catch up?**
 
@@ -164,8 +164,8 @@ A node was isolated (you killed it or the chaos proxy blocked its traffic).
 Now it comes back. What does it know? What does it not know? How does it recover?
 
 **You will build:**
-- A "rejoin" message sent by a node when it reconnects
-- A coordinator response containing current playback state
+- Rejoin detection in the coordinator: a node is marked lost after 2.5s with no heartbeat, and when its heartbeat comes back the coordinator prints `Node X is back online!` (the node never announces that it's back)
+- A `STATE_SNAPSHOT` the coordinator sends on its own to the returning node, containing current playback state
 - A node that applies the recovered state and resumes
 
 **You will learn:**
@@ -179,6 +179,44 @@ Wait 10 seconds. Reconnect it. Does it recover gracefully? Does it snap to the
 correct position or drift to it gradually?
 
 **Commit message:** `m6: node rejoin with state snapshot recovery`
+
+---
+
+## Milestone 7 — Clock synchronization
+
+**Concept: clocks that drift apart can be pulled back together by asking a shared time source**
+
+Milestone 5 showed that each node's clock slowly drifts away from real time.
+Nothing ever fixes it, so the error just keeps growing. Real devices solve this
+by regularly asking a trusted clock "what time is it?" and correcting
+themselves. The tricky part is that the answer takes time to travel, so by
+the time it arrives it is already a little out of date.
+
+**You will build:**
+- A time request from each node to the coordinator, which acts as the shared time source
+- A reply from the coordinator containing its current time
+- On the node: note when the request was sent and when the reply arrived, so
+  the round-trip time is known
+- A clock correction on the node: estimate the coordinator's time right now as
+  reply time + half the round trip, and adjust the local clock by the
+  difference
+- Syncing repeated every few seconds, so drift never has long to build up
+
+**You will learn:**
+- Why a cluster needs clock synchronization, and why one sync isn't enough
+- How the round-trip time is used to account for the reply being late
+- Why uneven delay (slow one way, fast the other) makes the correction wrong,
+  and why sync is never perfectly accurate
+- How this simple method (Cristian's algorithm) relates to NTP, which uses the
+  same idea with more servers and smarter filtering
+
+**Experiment:** Run the cluster and watch the coordinator's `Error` column
+for NodeC (-100ppm) before and after syncing is turned on. Does the error go
+back to near zero? Does it creep up again between syncs? Then send the time
+messages through the chaos proxy with random delay. How far off does the
+correction get, and why?
+
+**Commit message:** `m7: node clocks sync to the coordinator using round-trip time`
 
 ---
 
