@@ -21,6 +21,14 @@ When started with `--experiment A`, the launcher SHALL start the coordinator, a 
 - **THEN** the coordinator and the three nodes start
 - **AND** the chaos proxy starts with `--target-node NodeA --max-delay 3.5 --drop 0.7`
 
+### Requirement: Experiment B setup
+When started with `--experiment B`, the launcher SHALL start the coordinator, a chaos proxy that sends every PLAY command twice, and the three speaker nodes.
+
+#### Scenario: Run Experiment B
+- **WHEN** the user runs `python src/run_cluster.py --experiment B`
+- **THEN** the coordinator and the three nodes start
+- **AND** the chaos proxy starts with `--duplicate 1.0`
+
 ### Requirement: Experiment C setup
 When started with `--experiment C`, the launcher SHALL start a chaos proxy that cuts off NodeA from 5 to 15 seconds after it starts, and the three speaker nodes. It SHALL NOT start the coordinator.
 
@@ -48,7 +56,7 @@ When given an `--experiment` name it does not know, the launcher SHALL print an 
 
 #### Scenario: Typo in name
 - **WHEN** the user runs `python src/run_cluster.py --experiment Z`
-- **THEN** an error is printed naming the valid choices (A, C)
+- **THEN** an error is printed naming the valid choices (A, B, C)
 - **AND** no coordinator, proxy, or node process is started
 
 ### Requirement: Clean shutdown

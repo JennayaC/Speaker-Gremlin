@@ -264,11 +264,12 @@ and why these properties are hard to guarantee across a network.
    Undo the change when you're done.
 
 **Findings & Observations:**
-- **What happens when the same PLAY command arrives twice?** Without idempotency guards, nodes process redundant commands repeatedly, leading to duplicate reactions, desynchronized states, or glitches (e.g., repeated play attempts, skipped tracks, double state transitions).
-- **Observed Behavior Without Protection:** When duplicate commands were delivered back-to-back, nodes logged receipt for each duplicate packet. Unprotected commands were only spared from executing twice by coincidence (negative wait times), rather than deliberate protocol design.
-- **Idempotency Implementation:** Added monotonic command sequence numbers (`cmd_seq`) from the coordinator and tracked `last_applied_seq` on each speaker node.
-- **Observed Behavior With Protection:** Nodes successfully applied the initial command (`cmd_seq = 1`), scheduled synchronized playback, and subsequently detected and dropped the duplicate packet with `[NodeX] Drop redundant PLAY command (seq 1). Last applied: 1`, maintaining uninterrupted playback.
-- **Key Takeaway:** Over networks providing at-least-once delivery (retries, network duplicates), receivers must enforce idempotency so that processing a message multiple times produces the exact same outcome as processing it once.
+- **What happens when the same PLAY command arrives twice?** With `--duplicate 1.0`, the chaos proxy relays each PLAY to its node, then sends an exact copy. Both copies carry the same `cmd_seq` (1).
+- **With protection (normal run):** Each node accepts the first PLAY (`Received PLAY command`) and plays once. About 2 seconds later it drops the copy with `Drop redundant PLAY command (seq 1). Last applied: 1`.
+- **Why the copy is dropped late:** The node sleeps until play time inside its receive loop, so the copy waits in the socket until the node wakes up. While it sleeps, the node can't hear any other message either.
+- **Without protection (break it):** With the `cmd_seq` check commented out, each node prints `Received PLAY command` twice: it accepts the copy. It doesn't play twice only because the play time has already passed by the time it reads the copy. That's luck, not design. If the copy arrived before play time, the node would schedule playback twice.
+- **How it's protected:** The coordinator numbers each command (`cmd_seq`, always going up). Each node remembers `last_applied_seq` and drops anything at or below it.
+- **Key takeaway:** Networks can deliver the same message more than once (retries, duplicates). The receiver must make sure that handling a message twice has the same result as handling it once. This is called idempotency.
 
 ---
 

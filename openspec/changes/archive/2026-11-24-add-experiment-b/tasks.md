@@ -14,8 +14,8 @@
 
 ## 3. Docs
 
-- [ ] 3.1 In `docs/milestones.md` Experiment B, add a "How to run it" section (before Findings) with `python src/run_cluster.py --experiment B`, what to watch for (from 2.3), Ctrl+C to stop, and an optional "break it" step: comment out the `cmd_seq` check in `src/speaker_node.py` and run again to see the node react twice. Verify: following the steps as written gives the output from 2.3.
-- [ ] 3.2 In `README.md` "Quick way", change the experiment line to mention `--experiment A`, `B`, or `C`. Verify: the names match the dictionary.
+- [x] 3.1 In `docs/milestones.md` Experiment B, add a "How to run it" section (before Findings) with `python src/run_cluster.py --experiment B`, what to watch for (from 2.3), Ctrl+C to stop, and an optional "break it" step: comment out the `cmd_seq` check in `src/speaker_node.py` and run again to see the node react twice. Verify: following the steps as written gives the output from 2.3.
+- [x] 3.2 In `README.md` "Quick way", change the experiment line to mention `--experiment A`, `B`, or `C`. Verify: the names match the dictionary.
 
 ## Workflow follow-up
 

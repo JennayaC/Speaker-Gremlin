@@ -46,10 +46,12 @@ From the project root, start every process at once. Press `Ctrl+C` to stop them 
 python src/run_cluster.py
 ```
 
-To run an experiment setup instead, add `--experiment A` or `--experiment C` (see the Anchor Experiments in `docs/milestones.md` for what each one does):
+To run an experiment setup instead, add `--experiment A`, `--experiment B`, or `--experiment C` (see the Anchor Experiments in `docs/milestones.md` for what each one does):
 ```bash
 python src/run_cluster.py --experiment A
 ```
+
+> **Note:** Experiment C needs the coordinator running in its own terminal first (`python src/coordinator.py`). When you start Experiment C, the cluster reminds you to check this and waits for you to press Enter.
 
 ### Manual way (one terminal per process)
 Useful when you want to stop or restart a single process. Open separate terminal windows or panes for each process:
