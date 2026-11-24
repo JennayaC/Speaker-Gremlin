@@ -45,6 +45,19 @@ try:
 
             msg = json.loads(data.decode())
 
+            # 0. Time Request (Milestone 7): the coordinator is the cluster's time source.
+            # Reply straight to the node with its own time, and echo back the node's
+            # send time (t0) so the node can work out the round trip.
+            # This is not a heartbeat, so skip all the heartbeat code below.
+            if msg.get("type") == "TIME_REQUEST":
+                reply = {
+                    "type": "TIME_REPLY",
+                    "t0": msg["t0"],
+                    "coord_time": time.time()
+                }
+                sock.sendto(json.dumps(reply).encode(), ('127.0.0.1', msg["port"]))
+                continue
+
             node = msg['node']
             seq = msg['seq']
 
@@ -56,7 +69,13 @@ try:
             # 1. Clock Error (Drift)
             local_ts = msg['sender_ts']
             error_msg = (local_ts - expected_ts) * 1000
-            print(f"[{node}] Expected: {expected_ts:.3f} | Local: {local_ts:.3f} | Error: {error_msg:+.1f}ms")
+            if "raw_ts" in msg:
+                # Milestone 7: node has sync on. Show the original drift (raw clock)
+                # next to the synced clock, both measured against the coordinator's time.
+                raw_error = (msg['raw_ts'] - expected_ts) * 1000
+                print(f"[{node}] Raw error: {raw_error:+.1f}ms | Synced error: {error_msg:+.1f}ms")
+            else:
+                print(f"[{node}] Expected: {expected_ts:.3f} | Local: {local_ts:.3f} | Error: {error_msg:+.1f}ms")
 
             # 2. Packet Loss and Sequence Order Detection
             if node in last_seen_sequence:

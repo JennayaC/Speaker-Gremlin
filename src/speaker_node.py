@@ -16,12 +16,17 @@ import json
 import sys
 
 #CLI Argument Parsing - Node ID (1,2,3), Port Number (5003,5004,5005), Drift Value (+ or -)
-node_id = sys.argv[1]
-port_num = int(sys.argv[2])
+#Optional --sync switch (Milestone 7): turns on clock sync with the coordinator.
+#It can go anywhere, so remove it first and read the normal arguments from what's left.
+sync_on = "--sync" in sys.argv
+cli_args = [arg for arg in sys.argv if arg != "--sync"]
+
+node_id = cli_args[1]
+port_num = int(cli_args[2])
 
 #Optional drift value for clock skew (in microseconds)
-if len(sys.argv) > 3:
-    drift_val = float(sys.argv[3])
+if len(cli_args) > 3:
+    drift_val = float(cli_args[3])
     drift_rate = drift_val/1e6
 else:
     drift_rate = 0.0
@@ -42,6 +47,14 @@ def get_drifted_time():
     drift = elapsed * (1.0 + drift_rate)
     return start_real + drift #this is the drifted wall time
 
+#Milestone 7: the synced clock = raw drifting clock + corrections from syncing.
+#clock_offset stays 0 when sync is off, so the synced clock equals the raw clock.
+#The raw clock is never changed, so the original drift can still be shown.
+clock_offset = 0.0
+
+def get_synced_time():
+    return get_drifted_time() + clock_offset
+
 print(f"I'M ALIVE! Node: {node_id}\n")
 
 #Variables to keep track of node state
@@ -56,10 +69,14 @@ try:
         msg = {
             "type": "HEARTBEAT",
             "seq": seq,
-            "sender_ts": get_drifted_time(),
+            "sender_ts": get_synced_time(),
             "node": node_id,
             "port": port_num
         }
+        #Milestone 7: with sync on, also send the raw drifting clock so the
+        #coordinator can show the original drift next to the synced clock.
+        if sync_on:
+            msg["raw_ts"] = get_drifted_time()
 
         payload = json.dumps(msg).encode()
         sock.sendto(payload, COOR_ADDR)
@@ -84,10 +101,10 @@ try:
                 current_version = incoming_version
                 last_applied_seq = msg["cmd_seq"]
                 print(f"[{node_id}] Received PLAY command, scheduled for: {msg['play_at']}")
-                wait_time = msg["play_at"] - get_drifted_time()
+                wait_time = msg["play_at"] - get_synced_time()
                 if wait_time > 0:
                     time.sleep(wait_time)
-                    print(f"[{node_id}] PLAYING NOW! Local time: {get_drifted_time():.3f}")
+                    print(f"[{node_id}] PLAYING NOW! Local time: {get_synced_time():.3f}")
 
             # 2. Handle STATE_SNAPSHOT (resync for nodes that missed the PLAY command)
             elif msg["type"] == "STATE_SNAPSHOT":
@@ -97,13 +114,13 @@ try:
                     print(f"[{node_id}] CONFLICT: Local version {current_version} is stale! Adopting coordinator version {incoming_version}")
                     current_version = incoming_version
                     playback_state = "PLAYING"
-                    wait_time = msg['play_at'] - get_drifted_time()
+                    wait_time = msg['play_at'] - get_synced_time()
                     if wait_time < 0:
                         elapsed = -wait_time
-                        print(f"[{node_id}] RESUMED PLAYBACK! Snapped to {elapsed:.2f}s into track. Local time: {get_drifted_time():.3f}")
+                        print(f"[{node_id}] RESUMED PLAYBACK! Snapped to {elapsed:.2f}s into track. Local time: {get_synced_time():.3f}")
                     else:
                         time.sleep(wait_time)
-                        print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_drifted_time():.3f}")
+                        print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_synced_time():.3f}")
                 else:
                     print(f"[{node_id}] REJECTED SNAPSHOT: Local version {current_version} >= incoming version {incoming_version}")
         except socket.timeout:
