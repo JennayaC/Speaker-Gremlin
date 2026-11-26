@@ -73,13 +73,23 @@ try:
             "node": node_id,
             "port": port_num
         }
-        #Milestone 7: with sync on, also send the raw drifting clock so the
-        #coordinator can show the original drift next to the synced clock.
+        #Milestone 7: with sync on, also send the raw drifting clock so the coordinator can show the original drift next to the synced clock.
         if sync_on:
             msg["raw_ts"] = get_drifted_time()
 
         payload = json.dumps(msg).encode()
         sock.sendto(payload, COOR_ADDR)
+
+        #Milestone 7: every 10th heartbeat (about every 5s), ask the coordinator for the time.
+        #t0 = our synced clock right now. The coordinator sends it back, so we canmeasure the round trip when the reply arrives.
+        if sync_on and seq % 10 == 0:
+            time_req = {
+                "type": "TIME_REQUEST",
+                "node": node_id,
+                "port": port_num,
+                "t0": get_synced_time()
+            }
+            sock.sendto(json.dumps(time_req).encode(), COOR_ADDR)
 
         seq += 1
         try:
@@ -123,6 +133,15 @@ try:
                         print(f"[{node_id}] PLAYING NOW AFTER RECOVERY! Local time: {get_synced_time():.3f}")
                 else:
                     print(f"[{node_id}] REJECTED SNAPSHOT: Local version {current_version} >= incoming version {incoming_version}")
+
+            # 3. Handle TIME_REPLY (Milestone 7: correct our clock, Cristian's algorithm)
+            elif msg["type"] == "TIME_REPLY":
+                t2 = get_synced_time()                    #our clock when the reply arrived
+                round_trip = t2 - msg["t0"]               #how long the whole ask-and-answer took
+                estimate = msg["coord_time"] + round_trip / 2  #guess: the reply took half the round trip
+                correction = estimate - t2                #how far off our clock is
+                clock_offset += correction                #shift the synced clock (raw clock untouched)
+                print(f"[{node_id}] SYNC: round trip {round_trip*1000:.1f}ms, corrected clock by {correction*1000:+.1f}ms")
         except socket.timeout:
             pass
         except ConnectionResetError:

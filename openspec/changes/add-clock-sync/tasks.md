@@ -13,18 +13,18 @@
 
 ## 3. Node: ask for the time and correct the clock
 
-- [ ] 3.1 In the node main loop, after sending the heartbeat: when `sync_on` and this is every 10th heartbeat, send a `TIME_REQUEST` {type, node, port, t0 = synced clock} to the proxy. Verify: with the same hand-started setup, the coordinator receives requests and does not crash (proxy currently forwards them as if heartbeats; fixed in 4.1).
-- [ ] 3.2 In the node's receive section, add a `TIME_REPLY` branch: compute round trip, estimate, correction (design.md decision 4), add it to `clock_offset`, and print `[NodeC] SYNC: round trip ...ms, corrected clock by ...ms`. Verify: NodeC prints a SYNC line about every 5s with a correction of about +50 ms; on the coordinator, NodeC's synced error stays within ~±50 ms (sawtooth) while raw error keeps growing.
+- [x] 3.1 In the node main loop, after sending the heartbeat: when `sync_on` and this is every 10th heartbeat, send a `TIME_REQUEST` {type, node, port, t0 = synced clock} to the proxy. Verify: with the same hand-started setup, the coordinator receives requests and does not crash (proxy currently forwards them as if heartbeats; fixed in 4.1).
+- [x] 3.2 In the node's receive section, add a `TIME_REPLY` branch: compute round trip, estimate, correction (design.md decision 4), add it to `clock_offset`, and print `[NodeC] SYNC: round trip ...ms, corrected clock by ...ms`. Verify: NodeC prints a SYNC line about every 5s with a correction of about +50 ms; on the coordinator, NodeC's synced error stays within ~±50 ms (sawtooth) while raw error keeps growing.
 
 ## 4. Chaos proxy: time requests
 
-- [ ] 4.1 In `src/chaos_proxy.py`, after the PLAY branch: add a `TIME_REQUEST` branch that forwards to the coordinator, prints `Forward time request from <node>`, and `continue`s. Verify: hand-started run shows the new line, and `--target-node NodeC --drop 1.0` still lets NodeC's time requests through (heartbeats dropped, SYNC lines still appear).
-- [ ] 4.2 Add `--sync-delay` (float, default 0.0, help text like `--max-delay`) and show it in the startup line. In the time-request branch, when it's above 0, forward on a background thread after `random.uniform(0, sync_delay)` and print the delay. Verify: with `--sync-delay 0.5`, NodeC's synced error jumps around by up to roughly +250 ms after each sync; heartbeats still show "No delay or drop".
+- [x] 4.1 In `src/chaos_proxy.py`, after the PLAY branch: add a `TIME_REQUEST` branch that forwards to the coordinator, prints `Forward time request from <node>`, and `continue`s. Verify: hand-started run shows the new line, and `--target-node NodeC --drop 1.0` still lets NodeC's time requests through (heartbeats dropped, SYNC lines still appear).
+- [x] 4.2 Add `--sync-delay` (float, default 0.0, help text like `--max-delay`) and show it in the startup line. In the time-request branch, when it's above 0, forward on a background thread after `random.uniform(0, sync_delay)` and print the delay. Verify: with `--sync-delay 0.5`, NodeC's synced error jumps around by up to roughly +250 ms after each sync; heartbeats still show "No delay or drop".
 
 ## 5. Launcher: SYNC and SYNC-DELAY setups
 
-- [ ] 5.1 In `src/run_cluster.py`: build the three node commands from optional experiment keys `drifts` (default `[0, 50, -100]`) and `sync` (default False, adds `--sync`), instead of the hardcoded lines 67-69. Update the comment above `EXPERIMENTS` to list the new keys. Verify: `python src/run_cluster.py --experiment A` still runs exactly as before.
-- [ ] 5.2 Add `"SYNC"` (`proxy_args: []`, coordinator on, `drifts: [0, 5000, -10000]`, `sync: True`) and `"SYNC-DELAY"` (same, `proxy_args: ["--sync-delay", "0.5"]`) with short comments like A/B/C. Verify: `--experiment Z` lists A, B, C, SYNC, SYNC-DELAY.
+- [x] 5.1 In `src/run_cluster.py`: build the three node commands from optional experiment keys `drifts` (default `[0, 50, -100]`) and `sync` (default False, adds `--sync`), instead of the hardcoded lines 67-69. Update the comment above `EXPERIMENTS` to list the new keys. Verify: `python src/run_cluster.py --experiment A` still runs exactly as before.
+- [x] 5.2 Add `"SYNC"` (`proxy_args: []`, coordinator on, `drifts: [0, 5000, -10000]`, `sync: True`) and `"SYNC-DELAY"` (same, `proxy_args: ["--sync-delay", "0.5"]`) with short comments like A/B/C. Verify: `--experiment Z` lists A, B, C, SYNC, SYNC-DELAY.
 - [ ] 5.3 Run `--experiment SYNC` for ~30s and `--experiment SYNC-DELAY` for ~30s. Verify: SYNC shows raw error growing (NodeC about −300 ms after 30s) while synced error stays small; SYNC-DELAY shows synced error jumping to positive values (up to ~+250 ms) after syncs. Note the real numbers for the docs.
 
 ## 6. Docs

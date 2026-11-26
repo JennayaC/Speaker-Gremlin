@@ -17,6 +17,9 @@ NORMAL = {"proxy_args": [], "start_coordinator": True}
 # Named experiment setups. Each one says:
 #   proxy_args        -> extra switches passed to the chaos proxy
 #   start_coordinator -> start the coordinator with the cluster or not
+# Optional keys (leave out to get the normal values):
+#   drifts            -> clock drift in PPM for NodeA, NodeB, NodeC (default [0, 50, -100])
+#   sync              -> True = start every node with --sync (default False)
 EXPERIMENTS = {
     # Experiment A: NodeA is alive but very unreliable. 70% of its heartbeats are
     # dropped and the rest are delayed by up to 3.5s. Delay alone isn't enough:
@@ -37,6 +40,24 @@ EXPERIMENTS = {
     "C": {
         "proxy_args": ["--target-node", "NodeA", "--wait-after", "5", "--isolate-for", "10"],
         "start_coordinator": False,  # False = you must start the coordinator yourself in its own terminal
+    },
+    # Milestone 7 SYNC: nodes ask the coordinator for the time every 5s and fix their clocks.
+    # Drift is much bigger than normal so it's easy to see. The coordinator shows
+    # raw error (keeps growing) next to synced error (stays small).
+    "SYNC": {
+        "proxy_args": [],
+        "start_coordinator": True,
+        "drifts": [0, 5000, -10000],
+        "sync": True,
+    },
+    # Milestone 7 SYNC-DELAY: same as SYNC, but the proxy holds each time request
+    # up to 0.5s. Only the trip TO the coordinator is slow, so nodes guess wrong
+    # and their synced clocks end up AHEAD.
+    "SYNC-DELAY": {
+        "proxy_args": ["--sync-delay", "0.5"],
+        "start_coordinator": True,
+        "drifts": [0, 5000, -10000],
+        "sync": True,
     },
 }
 
@@ -63,10 +84,16 @@ if setup["start_coordinator"]:
 # 2. Chaos proxy, with this setup's switches added on the end
 commands.append([sys.executable, "src/chaos_proxy.py"] + setup["proxy_args"])
 
-# 3. The three speaker nodes (same in every setup)
-commands.append([sys.executable, "src/speaker_node.py", "NodeA", "5003", "0"])
-commands.append([sys.executable, "src/speaker_node.py", "NodeB", "5004", "50"])
-commands.append([sys.executable, "src/speaker_node.py", "NodeC", "5005", "-100"])
+# 3. The three speaker nodes. Drift and sync come from the setup if it sets them,
+#    otherwise the normal values (drift 0 / 50 / -100, no sync).
+drifts = setup.get("drifts", [0, 50, -100])
+sync_on = setup.get("sync", False)
+nodes = [("NodeA", "5003"), ("NodeB", "5004"), ("NodeC", "5005")]
+for (name, port), drift in zip(nodes, drifts):
+    cmd = [sys.executable, "src/speaker_node.py", name, port, str(drift)]
+    if sync_on:
+        cmd.append("--sync")
+    commands.append(cmd)
 
 processes = []
 

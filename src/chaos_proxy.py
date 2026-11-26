@@ -23,12 +23,13 @@ parser.add_argument("--target-node", type=str, default=None, help="Target specif
 parser.add_argument("--wait-after", type=float, default=0.0, help="Seconds after proxy start before the target node is cut off")
 parser.add_argument("--isolate-for", type=float, default=0.0, help="Seconds the target node stays cut off (0 = never cut off)")
 parser.add_argument("--duplicate", type=float, default=0.0, help="Probability of sending each PLAY command twice (0.0 to 1.0)")
+parser.add_argument("--sync-delay", type=float, default=0.0, help="Maximum random delay in seconds for TIME_REQUEST messages only (all nodes)")
 args = parser.parse_args()
 
 PROXY_PORT = 5002
 COORDINATOR_ADDR = ('127.0.0.1', 5001)
 
-print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_delay*1000:.0f}ms, Duplicate PLAY: {args.duplicate*100:.0f}%, Target: {args.target_node or 'ALL'})")
+print(f"Chaos Proxy started (Drop: {args.drop*100:.0f}%, Max Delay: {args.max_delay*1000:.0f}ms, Duplicate PLAY: {args.duplicate*100:.0f}%, Sync Delay: {args.sync_delay*1000:.0f}ms, Target: {args.target_node or 'ALL'})")
 if args.isolate_for > 0:
     print(f"Isolation window: cut off {args.target_node or 'ALL'} from {args.wait_after:.1f}s to {args.wait_after + args.isolate_for:.1f}s")
 
@@ -40,6 +41,12 @@ def delayed_send(data, delay, node):
     time.sleep(delay)
     sock.sendto(data, COORDINATOR_ADDR) #forward to coordinator
     print(f"Forward heartbeat from {node} (Delay: {delay * 1000:.1f}ms)")
+
+#Milestone 7: same idea for time requests, so a slow time request doesn't block heartbeats
+def delayed_time_request(data, delay, node):
+    time.sleep(delay)
+    sock.sendto(data, COORDINATOR_ADDR) #forward to coordinator
+    print(f"Forward time request from {node} (Sync delay: {delay * 1000:.1f}ms)")
 
 #Start time for the isolation window (monotonic = a stopwatch that never jumps)
 start_time = time.monotonic()
@@ -71,6 +78,19 @@ try:
             if args.duplicate > 0 and random.random() < args.duplicate:
                 sock.sendto(data, ('127.0.0.1', node_port))
                 print(f"Duplicate PLAY to port {node_port}")
+            continue
+
+        # Milestone 7. TIME_REQUEST from a node: always forward it to the coordinator.
+        # Heartbeat chaos (drop, delay, isolation) is for heartbeats only, same rule as PLAY.
+        # --sync-delay: hold the request a random time first, so the trip TO the coordinator
+        # is slower than the trip back (the reply skips the proxy). This breaks the "equal halves" guess.
+        if msg.get("type") == "TIME_REQUEST":
+            if args.sync_delay > 0:
+                delay = random.uniform(0, args.sync_delay)
+                threading.Thread(target=delayed_time_request, args=(data, delay, node), daemon=True).start()
+            else:
+                sock.sendto(data, COORDINATOR_ADDR)
+                print(f"Forward time request from {node}")
             continue
 
         # 2. Check if packet is targeted for chaos 
